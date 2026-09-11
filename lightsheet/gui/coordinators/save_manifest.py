@@ -72,9 +72,7 @@ class ManifestRecorder:
         # (cursor commits, lifecycle updates) must land next to the
         # fileset chosen here, not wherever the process cwd happens to
         # be when they run.
-        saver._manifest_path = manifest_path_for(
-            saver.filenames_lists[0][0]
-        ).resolve()
+        saver._manifest_path = manifest_path_for(saver.filenames_lists[0][0]).resolve()
         save_mode = {
             "reconstructed_frame": "stitch",
             "ETLscan": "all_crop",
@@ -161,9 +159,7 @@ class ManifestRecorder:
         """
         saver = self._saver
         saver.acquisition_uuid = resume_manifest.uuid
-        saver._manifest_path = manifest_path_for(
-            saver.filenames_lists[0][0]
-        ).resolve()
+        saver._manifest_path = manifest_path_for(saver.filenames_lists[0][0]).resolve()
         new_cursors = dict(resume_manifest.cursors)
         # Keep only path-keyed HDF5 cursors — legacy save-mode keys
         # ("stitch"/"all_crop"/"all_full") are retired on the first

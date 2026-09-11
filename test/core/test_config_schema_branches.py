@@ -202,8 +202,7 @@ def test_load_sections_from_ini_stale_ibeam_max_power_is_rejected(
     sections = load_sections_from_ini(str(ini), overlay_path=None)
     result = collect_config_errors({"iBeam": sections["iBeam"]})
     assert any("Max Power" in e for e in result.errors), (
-        f"the retired Max Power key must produce a startup error, got "
-        f"{result.errors}"
+        f"the retired Max Power key must produce a startup error, got {result.errors}"
     )
 
 

@@ -220,9 +220,7 @@ def test_auto_laser_selection_non_tuple_payload_falls_back(
     ctrl._auto_laser1 = True
     bad_snapshot = Mock()
     bad_snapshot.auto_lasers = "laser1"  # truthy non-tuple
-    monkeypatch.setattr(
-        ctrl.state, "snapshot", Mock(return_value=bad_snapshot)
-    )
+    monkeypatch.setattr(ctrl.state, "snapshot", Mock(return_value=bad_snapshot))
     assert ctrl.save_panel._auto_laser_selection() == (True, False)
 
 
@@ -330,9 +328,7 @@ def test_save_mode_mapped_button_commits_model(
     from lightsheet.state import SaveMode
 
     ctrl = controller
-    ctrl.save_panel.updateUi_save_mode(
-        ctrl.save_panel.ui.radioButton_saveStitchBlend
-    )
+    ctrl.save_panel.updateUi_save_mode(ctrl.save_panel.ui.radioButton_saveStitchBlend)
     assert ctrl.state.save_options.mode == SaveMode.STITCH_BLEND
 
 
@@ -386,10 +382,7 @@ def test_select_file_hdf5_lists_datasets(
     assert ui.listWidget_fileDatasets.count() == 2
     assert ui.listWidget_fileDatasets.item(0).text() == "reconstructed_frame001"
     assert ui.pushButton_selectDataset.isEnabled() is True
-    assert (
-        f"File {h5_path} opened"
-        in ctrl.ui.plainTextEdit_messageLog.toPlainText()
-    )
+    assert f"File {h5_path} opened" in ctrl.ui.plainTextEdit_messageLog.toPlainText()
 
 
 def test_select_file_zarr_store_lists_planes(
@@ -569,14 +562,11 @@ def test_select_dataset_missing_key_continues_with_message(
     ctrl.sig_message.connect(lambda m: messages.append(m))
     ctrl.save_panel.updateUi_select_dataset()
 
-    assert any(
-        "Could not open dataset missing_dataset" in m for m in messages
-    ), messages
-    # The loop continued — the second (valid) dataset still displayed.
-    assert (
-        "reconstructed_frame001"
-        in ctrl.ui.plainTextEdit_messageLog.toPlainText()
+    assert any("Could not open dataset missing_dataset" in m for m in messages), (
+        messages
     )
+    # The loop continued — the second (valid) dataset still displayed.
+    assert "reconstructed_frame001" in ctrl.ui.plainTextEdit_messageLog.toPlainText()
 
 
 # ---------------------------------------------------------------------------
@@ -624,11 +614,7 @@ def test_read_zarr_dataset_merges_ome_channel_wavelength(
         zarr_path,
         np.zeros((2, 2, 4, 4), dtype=np.uint16),
         write_ome=True,
-        ome={
-            "omero": {
-                "channels": [{"wavelength": 555}, {"wavelength": 647}]
-            }
-        },
+        ome={"omero": {"channels": [{"wavelength": 555}, {"wavelength": 647}]}},
     )
     data, attrs = ctrl.save_panel._read_zarr_dataset(str(zarr_path), "ch1_plane_0001")
     assert attrs["Channel Wavelength"] == 647

@@ -441,7 +441,6 @@ def test_stub_task_partial_construction_del_is_quiet() -> None:
         with pytest.raises(stub_nidaqmx.errors.Error):
             stub_nidaqmx.Task()
         gc.collect()
-    assert not caught, (
-        "GC of a failed stub Task emitted warnings: "
-        + "; ".join(str(w.message) for w in caught)
+    assert not caught, "GC of a failed stub Task emitted warnings: " + "; ".join(
+        str(w.message) for w in caught
     )

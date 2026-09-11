@@ -227,9 +227,7 @@ def row_to_dict(row: _Row) -> dict[str, typing.Any]:
     }
 
 
-def rows_match(
-    a: list[dict[str, typing.Any]], b: list[dict[str, typing.Any]]
-) -> bool:
+def rows_match(a: list[dict[str, typing.Any]], b: list[dict[str, typing.Any]]) -> bool:
     if len(a) != len(b):
         return False
     for ra, rb in zip(a, b, strict=True):

@@ -156,9 +156,7 @@ def test_move_to_stack_end_in_range_moves_and_reports(
 
     ctrl._mc.updateUi_move_to_stack_end()
 
-    assert ctrl.motors.horizontal.get_position("μm") == pytest.approx(
-        50000.0, rel=1e-3
-    )
+    assert ctrl.motors.horizontal.get_position("μm") == pytest.approx(50000.0, rel=1e-3)
     assert _log_contains(ctrl, "Moving to stack end")
 
 
@@ -346,9 +344,7 @@ def test_show_camera_interpolation_regresses_and_plots(
 
     ctrl = controller
     # Perfectly linear relation: y = 0.4 x + 1.
-    ctrl.camera_focus_relation = np.array(
-        [[0.0, 1.0], [5.0, 3.0], [10.0, 5.0]]
-    )
+    ctrl.camera_focus_relation = np.array([[0.0, 1.0], [5.0, 3.0], [10.0, 5.0]])
     ctrl.donnees = np.arange(20, dtype=float).reshape(2, 10)
     ctrl.number_of_calibration_planes = 2
     ctrl.number_of_camera_positions = 10

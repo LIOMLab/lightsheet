@@ -269,7 +269,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
 
         QMainWindow.__init__(self)
 
-
         # GUI-thread-owned observable state model. Constructed before panels
         # so compatibility properties (laser1_power_pct, _auto_laser*, etc.)
         # and the model's snapshot source are available to all widgets. The
@@ -285,7 +284,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
         # stackedPanels programmatically below.
         self.ui = typing.cast(typing.Any, Ui_Shell())
         self.ui.setupUi(self)
-
 
         # Expose the E-stop widgets as direct attributes for back-compat.
         self.toolBar_estop = self.ui.toolBar_estop
@@ -405,7 +403,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
         # past table, Planned/Past toggle, and Refresh button.
         self.ui.stackedPanels.addWidget(_wrap(self.past_panel))  # 6 Past
         self.ui.stackedPanels.addWidget(_wrap(self.calibration_panel))  # 7 Calibrate
-
 
         # --- Left-rail navigation wiring ---
         # Exclusive QButtonGroup maps each rail button to a stackedPanels
@@ -1089,8 +1086,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
             _badge_fm.horizontalAdvance(_badge_widest) + _MODE_BADGE_HPADDING_PX
         )
 
-
-
     def _on_levels_changed(self, levels_min: int, levels_max: int) -> None:
         """Apply a LevelsBar WINDOW handle drag to the ImageView display
         clamp window and re-render."""
@@ -1164,7 +1159,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
             self._levels_autofit_done = True
             self.ui.levelsBar.window_min = lo
             self.ui.levelsBar.window_max = hi
-
 
     def hardware_init(self) -> None:
         """Completes initialisation of hardware and image consumers.
@@ -1509,7 +1503,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
         else:
             event.ignore()
 
-
     # --- GUI-thread signal receivers (must stay in this class dict) ---
     # PySide6's Signal.connect() classifies a bound method as a real Qt slot
     # (queued to the receiver's thread) only while the method lives in the
@@ -1768,7 +1761,6 @@ class Controller_MainWindow(_ShellUiDelegatesMixin, QMainWindow):
         self.state.sig_save_options_changed.connect(
             self.save_panel.updateUi_save_options_from_state
         )
-
 
     # --- adaptive trajectory dock lifecycle ---
     @Slot(int, float, float, float, float, str, bool, bool)

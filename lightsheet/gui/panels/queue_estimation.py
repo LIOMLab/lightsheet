@@ -116,8 +116,7 @@ def zarr_pyramid_multiplier(mgr: AcquisitionTableManager) -> float:
         stack_step = float(getattr(mgr._shell, "stack_step", 0.0))
     except (TypeError, ValueError) as e:
         logger.warning(
-            "Failed to parse stack_step; "
-            "disabling Zarr pyramid overhead estimate: %s",
+            "Failed to parse stack_step; disabling Zarr pyramid overhead estimate: %s",
             e,
         )
         stack_step = 0.0

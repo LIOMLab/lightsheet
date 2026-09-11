@@ -236,9 +236,7 @@ def run_hdf5_save_loop(saver: FrameSaver) -> None:
         if aborted:
             break
     saver._finalize_manifest()
-    logger.info(
-        "frame_saver_worker exited (saving_started=%s)", saver.saving_started
-    )
+    logger.info("frame_saver_worker exited (saving_started=%s)", saver.saving_started)
 
 
 def run_hdf5_multi_channel_save_loop(saver: FrameSaver) -> None:
@@ -284,9 +282,7 @@ def run_hdf5_multi_channel_save_loop(saver: FrameSaver) -> None:
     # and indexed correctly.
     resume_offset = saver._common_resume_plane
     file_idx = [resume_offset // n_datasets_per_file for _ in range(n_channels)]
-    ds_counter = [
-        (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
-    ]
+    ds_counter = [(resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)]
     outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
     frames_written = 0
 
@@ -358,9 +354,7 @@ def run_hdf5_multi_channel_save_loop(saver: FrameSaver) -> None:
                 if frame.ndim == 2:
                     frame = np.expand_dims(frame, axis=0)
                 for f_idx in range(frame.shape[0]):
-                    path_root = (
-                        saver.datasets_name + f"{ds_counter[channel_idx]:03d}"
-                    )
+                    path_root = saver.datasets_name + f"{ds_counter[channel_idx]:03d}"
                     saver.dataset = outfile.create_dataset(
                         path_root, data=frame[f_idx, :, :]
                     )
@@ -530,9 +524,7 @@ def run_zarr_save_loop(saver: FrameSaver) -> None:
         )
     else:
         frames_per_buffer = 1
-    n_planes = (
-        saver.number_of_files * int(saver.number_of_datasets) * frames_per_buffer
-    )
+    n_planes = saver.number_of_files * int(saver.number_of_datasets) * frames_per_buffer
     store_path = str(
         Path(saver.parent.save_directory) / (saver.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
     )
@@ -796,9 +788,7 @@ def run_both_save_loop(saver: FrameSaver) -> None:
         )
     else:
         frames_per_buffer = 1
-    n_planes = (
-        saver.number_of_files * int(saver.number_of_datasets) * frames_per_buffer
-    )
+    n_planes = saver.number_of_files * int(saver.number_of_datasets) * frames_per_buffer
     store_path = str(
         Path(saver.parent.save_directory) / (saver.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
     )
@@ -814,9 +804,9 @@ def run_both_save_loop(saver: FrameSaver) -> None:
     # diverging the Zarr output from the resumed HDF5 fileset and the
     # manifest's committed cursors.
     n_channels = len(saver.filenames_lists) if saver.filenames_lists else 1
-    store_exists = Path(store_path).is_dir() and (
-        Path(store_path) / "zarr.json"
-    ).is_file()
+    store_exists = (
+        Path(store_path).is_dir() and (Path(store_path) / "zarr.json").is_file()
+    )
     try:
         if saver.resume_manifest is not None and store_exists:
             saver._zarr_saver.resume_stack(
@@ -1114,9 +1104,7 @@ def run_both_multi_channel_save_loop(saver: FrameSaver) -> None:
         )
     else:
         frames_per_buffer = 1
-    n_planes = (
-        saver.number_of_files * int(saver.number_of_datasets) * frames_per_buffer
-    )
+    n_planes = saver.number_of_files * int(saver.number_of_datasets) * frames_per_buffer
     store_path = str(
         Path(saver.parent.save_directory) / (saver.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
     )
@@ -1166,9 +1154,7 @@ def run_both_multi_channel_save_loop(saver: FrameSaver) -> None:
     # and indexed correctly.
     resume_offset = saver._common_resume_plane
     file_idx = [resume_offset // n_datasets_per_file for _ in range(n_channels)]
-    ds_counter = [
-        (resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)
-    ]
+    ds_counter = [(resume_offset % n_datasets_per_file) + 1 for _ in range(n_channels)]
     outfiles: list = [None] * n_channels  # ty: ignore[missing-type-argument]
     frames_written = 0
     z_idx_per_channel: dict[int, int] = {
@@ -1234,9 +1220,7 @@ def run_both_multi_channel_save_loop(saver: FrameSaver) -> None:
                     frame = np.expand_dims(frame, axis=0)
                 for f_idx in range(frame.shape[0]):
                     # --- HDF5 write (one dataset per plane per channel) ---
-                    path_root = (
-                        saver.datasets_name + f"{ds_counter[channel_idx]:03d}"
-                    )
+                    path_root = saver.datasets_name + f"{ds_counter[channel_idx]:03d}"
                     saver.dataset = outfile.create_dataset(
                         path_root, data=frame[f_idx, :, :]
                     )

@@ -83,8 +83,7 @@ def test_intensity_benchmark_under_50ms() -> None:
         samples_ms.append((time.perf_counter() - start) * 1000.0)
     elapsed_ms = min(samples_ms)
     assert elapsed_ms < 50.0, (
-        f"p99.99 on 2048x2048 took {elapsed_ms:.1f} ms min-of-5 "
-        f"(budget 50 ms)"
+        f"p99.99 on 2048x2048 took {elapsed_ms:.1f} ms min-of-5 (budget 50 ms)"
     )
 
 

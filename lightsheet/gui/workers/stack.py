@@ -346,9 +346,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         finally:
             self._run_teardown(watchdog)
 
-    def _run_setup(
-        self, watchdog: LaserWatchdog | None
-    ) -> tuple[int, int] | None:
+    def _run_setup(self, watchdog: LaserWatchdog | None) -> tuple[int, int] | None:
         """Set up the run: save-side configuration, camera arm, watchdog
         arm, the pre-stop laser guard, the plane-count guards, the
         one-time waveform compute, and the adaptive/focus/autofocus
@@ -1050,9 +1048,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                             self._shell._fs.enqueue_buffer(
                                 self._shell.reconstructed_frame  # ty: ignore[invalid-argument-type]
                             )
-                            self._shell.sig_message.emit(
-                                "Saving Reconstructed Image"
-                            )
+                            self._shell.sig_message.emit("Saving Reconstructed Image")
 
                 # Per-plane autofocus: record the focus sample, emit
                 # the trajectory and status signals, and update the
@@ -1073,13 +1069,9 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                         if self._adaptive_current_cmd is not None
                         else self.camera.exposure_time
                     )
-                    sharp = frame_sharpness_variance(focus_frame) / max(
-                        exposure, 1e-9
-                    )
+                    sharp = frame_sharpness_variance(focus_frame) / max(exposure, 1e-9)
 
-                    feedforward = self._autofocus_controller.feedforward(
-                        stage_pos_mm
-                    )
+                    feedforward = self._autofocus_controller.feedforward(stage_pos_mm)
                     residual = self._autofocus_controller.residual_mm
 
                     focus_sample = FocusSample(
@@ -1112,8 +1104,7 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
                     elif abs(residual) >= max_residual - 1e-9:
                         state = "clamped"
                     elif (
-                        not is_cadence
-                        or self._autofocus_controller.residual_unchanged
+                        not is_cadence or self._autofocus_controller.residual_unchanged
                     ):
                         state = "holding"
                     else:

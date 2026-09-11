@@ -100,9 +100,7 @@ _SCAN_MIXIN_SRC = (
 _PREVIEW_LIVE_SINGLE_SRC = (
     _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "preview_live_single.py"
 )
-_STACK_SRC = (
-    _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "stack.py"
-)
+_STACK_SRC = _HERE / ".." / ".." / "lightsheet" / "gui" / "workers" / "stack.py"
 
 # Module-level logger the exec'd body references (controller.py:45).
 _logger = logging.getLogger("lightsheet.gui.shell.controller")
@@ -330,9 +328,7 @@ def _call_recorder(
                 "type": "call",
                 "name": name,
                 "args": [_json_safe_arg(a) for a in args],
-                "kwargs": {
-                    str(k): _json_safe_arg(v) for k, v in kwargs.items()
-                },
+                "kwargs": {str(k): _json_safe_arg(v) for k, v in kwargs.items()},
             }
         )
         if fn is not None:
@@ -539,9 +535,7 @@ def _build_stack_standin(scenario: str) -> Mock:
     # stand-in so no self.-routed call can be swallowed by a Mock
     # auto-attr — this is what keeps the fixture honest across the
     # planned in-file run() split.
-    for name, member in inspect.getmembers(
-        StackWorker, predicate=inspect.isfunction
-    ):
+    for name, member in inspect.getmembers(StackWorker, predicate=inspect.isfunction):
         if name.startswith("__") and name.endswith("__"):
             # Mock forbids magic-method attribute sets, and run() never
             # dispatches to one through self. anyway.
@@ -562,9 +556,7 @@ def _build_stack_standin(scenario: str) -> Mock:
         src_path=str(_STACK_SRC),
         extra_ns=dict(vars(_stack_mod)),
     )
-    standin.run = _call_recorder(
-        calls, "run", types.MethodType(run_fn, standin)
-    )
+    standin.run = _call_recorder(calls, "run", types.MethodType(run_fn, standin))
 
     standin._calls = calls
     return standin

@@ -159,7 +159,6 @@ class _ShellUiDelegatesMixin:
                     float(step_s)
                 )
 
-
     @Slot(QAbstractButton)
     def updateUi_save_format_changed(
         self: Controller_MainWindow, button: QAbstractButton
@@ -407,7 +406,6 @@ class _ShellUiDelegatesMixin:
             text = text + " · MULTI-CH"
         self.ui.label_modeBadge.setText(text)
 
-
     def _cache_auto_laser_flags(self: Controller_MainWindow) -> None:
         """Commit the auto-laser checkboxes to the model. GUI thread only.
 
@@ -558,5 +556,3 @@ class _ShellUiDelegatesMixin:
         operator clicks L1/L2 or the tint is auto-applied on enabling
         the second auto-laser."""
         self._apply_channel_tint(channel_idx)
-
-
