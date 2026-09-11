@@ -505,7 +505,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             return None
         remaining_planes = n_planes - self._start_plane
         if remaining_planes <= 0:
-            remaining_planes = n_planes
+            self._shell.sig_message.emit(
+                "Stack acquisition skipped: start plane already past end"
+            )
+            self._shell.sig_beep.emit()
+            return None
         self._shell.sig_progress_update.emit(0)  # To reset progress bar
 
         # Compute scan waveforms only once before we start the stack acquisition
