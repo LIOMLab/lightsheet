@@ -802,18 +802,87 @@ def run_both_save_loop(saver: FrameSaver) -> None:
     store_path = str(
         Path(saver.parent.save_directory) / (saver.files_name + ".ome.zarr")  # ty: ignore[unresolved-attribute]
     )
+    # Resume dispatch: on a resumed run whose store already exists on
+    # disk, reopen the existing L0 array at the common resume plane via
+    # resume_stack (its /acquisition uuid + shape checks prove the store
+    # belongs to this manifest). The dispatch is existence-keyed, not
+    # cursor-keyed: a crash between start_stack and the first committed
+    # plane cursor leaves a uuid-stamped store with no cursor entry, and
+    # legacy manifests predate zarr cursors entirely — a cursor check
+    # would fall through to start_stack, whose merge check appends the
+    # resumed planes as a NEW channel (or overwrites the store),
+    # diverging the Zarr output from the resumed HDF5 fileset and the
+    # manifest's committed cursors.
+    n_channels = len(saver.filenames_lists) if saver.filenames_lists else 1
+    store_exists = Path(store_path).is_dir() and (
+        Path(store_path) / "zarr.json"
+    ).is_file()
     try:
-        saver._zarr_saver.start_stack(store_path, n_planes)
+        if saver.resume_manifest is not None and store_exists:
+            saver._zarr_saver.resume_stack(
+                store_path,
+                n_planes,
+                n_channels,
+                saver.resume_manifest.uuid,
+                start_plane=saver._common_resume_plane,
+            )
+        else:
+            saver._zarr_saver.start_stack(
+                store_path,
+                n_planes,
+                n_channels=n_channels,
+                acquisition_uuid=saver.acquisition_uuid,
+            )
+    except ResumeProbeError:
+        # The torn store cannot be reopened (missing/unreadable, UUID
+        # mismatch, shape mismatch) — fall back to a fresh _partN store
+        # rather than aborting the whole save. Same fallback contract as
+        # run_zarr_save_loop.
+        logger.warning("Zarr resume failed; falling back to _partN store")
+        base = saver.files_name + "_part2"
+        counter_fb = 2
+        while True:
+            candidate = f"{base}.ome.zarr"
+            save_dir = cast("Controller_MainWindow", saver.parent).save_directory
+            fallback_path = str(Path(save_dir) / candidate)
+            if not Path(fallback_path).exists():
+                break
+            counter_fb += 1
+            base = f"{saver.files_name}_part{counter_fb}"
+        try:
+            saver._zarr_saver.start_stack(
+                fallback_path,
+                n_planes,
+                n_channels=n_channels,
+                acquisition_uuid=saver.acquisition_uuid,
+            )
+        except Exception as e:
+            saver.sig_status_message.emit(f"Save error: {e}")
+            saver.saving_started = False
+            return
+        store_path = fallback_path
     except Exception as e:
         saver.sig_status_message.emit(f"Save error: {e}")
         saver.saving_started = False
         return
 
-    z_idx = 0
+    # Resume offsets: the Zarr frame counter starts at the reopened
+    # channel's first unwritten z-slice (0 for a fresh store), and the
+    # HDF5 half splits the common resume plane into (file index, dataset
+    # counter) the same way run_hdf5_save_loop does — without the split
+    # the first resumed create_dataset collides with the torn file's
+    # existing dataset names and aborts the save.
+    z_idx = saver._zarr_saver.resume_offset(0)
+    # Counts frames written THIS run so the (new-only) motor-position
+    # lists index correctly — mirrors the resume_offset subtraction in
+    # run_zarr_save_loop.
     zarr_pos_index = 0
     aborted = False
+    n_ds = int(getattr(saver, "number_of_datasets", 1) or 1)
+    resume_offset = saver._common_resume_plane
+    start_file_idx = resume_offset // n_ds if n_ds else 0
     try:
-        for idx in range(len(saver.filenames_list)):
+        for idx in range(start_file_idx, len(saver.filenames_list)):
             logger.info("File created: %s", saver.filenames_list[idx])
             try:
                 outfile = h5py.File(saver.filenames_list[idx], "a")
@@ -824,8 +893,8 @@ def run_both_save_loop(saver: FrameSaver) -> None:
                 saver.saving_started = False
                 break
 
-            counter = 1
-            for dataset in range(int(saver.number_of_datasets)):
+            counter = (resume_offset % n_ds) + 1 if idx == start_file_idx else 1
+            for dataset in range(counter - 1, n_ds):
                 while True:
                     try:
                         buffer: np.ndarray = saver.queue.get(True, 1)
@@ -912,6 +981,12 @@ def run_both_save_loop(saver: FrameSaver) -> None:
                             )
                             z_idx += 1
                             zarr_pos_index += 1
+                            # Committed-plane cursor for the Zarr half —
+                            # only after write_plane returned (durable
+                            # truth). Without this the manifest records
+                            # no zarr progress for "both" runs, so a
+                            # resume has no cursor to reopen against.
+                            saver._commit_manifest_cursor("zarr", store_path, z_idx)
                         break
                     except queue.Empty:
                         # stop_saving() may have flipped the flag.
@@ -1066,8 +1141,15 @@ def run_both_multi_channel_save_loop(saver: FrameSaver) -> None:
                 start_plane=saver._common_resume_plane,
             )
         else:
+            # Stamp the acquisition UUID so a later resume_stack can
+            # prove the store belongs to this manifest — without it the
+            # UUID check fails and the resume dispatch above can never
+            # reopen the store.
             saver._zarr_saver.start_stack(
-                store_path, n_planes, n_channels=n_channels
+                store_path,
+                n_planes,
+                n_channels=n_channels,
+                acquisition_uuid=saver.acquisition_uuid,
             )
     except Exception as e:
         saver.sig_status_message.emit(f"Save error: {e}")
