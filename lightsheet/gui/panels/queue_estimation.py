@@ -127,9 +127,12 @@ def zarr_pyramid_multiplier(mgr: AcquisitionTableManager) -> float:
     base_res = (abs(stack_step), 6.5 * binning_x, 6.5 * binning_y)
     max_res = max(base_res)
     level_count = sum(1 for t in (10, 25, 50, 100) if t >= max_res)
-    # Level 0 (raw) is always present; each downsampled level adds
-    # 0.25**i of L0. The multiplier covers L0 + all pyramid levels.
-    return sum(0.25**i for i in range(level_count))
+    # Level 0 (raw) is always present and each retained target adds one
+    # downsampled level at ~0.25**i of L0, so the on-disk pyramid has
+    # 1 + level_count levels and the multiplier can never be 0 — when no
+    # target is reachable (stack_step above 100 µm or binning >= 16 ->
+    # level_count == 0) the writer still produces the L0 array.
+    return sum(0.25**i for i in range(1 + level_count))
 
 
 def format_size_human_readable(mb: float, fmt: str) -> str:
