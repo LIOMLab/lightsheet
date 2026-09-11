@@ -144,10 +144,18 @@ def apply_queue_resume(
         # Untouched pre-crash queue: drop the completed rows and the
         # interrupted row; the resume row replaces the interrupted
         # one at the head.
-        for _ in range(min(qm.row_index + 1, mgr.table.rowCount())):
+        removed = min(qm.row_index + 1, mgr.table.rowCount())
+        for _ in range(removed):
             mgr.table.removeRow(0)
             if mgr._row_uuids:
+                mgr._row_meta.pop(mgr._row_uuids[0], None)
                 del mgr._row_uuids[0]
+        # Re-index the flagged-cell set: flags recorded against the
+        # removed leading rows are dropped and every surviving flag
+        # shifts down with its row (same contract as remove_stack).
+        mgr._flagged_cells = {
+            (r - removed, c) for (r, c) in mgr._flagged_cells if r >= removed
+        }
         mgr._insert_row_at(0, resume_row, meta)
         return True
     if rows_match(live, remaining):
