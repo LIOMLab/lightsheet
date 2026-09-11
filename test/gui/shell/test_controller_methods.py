@@ -114,14 +114,14 @@ def test_updateUi_show_hide_message_log_toggles_both_ways(
 
 def test_open_help_calls_webbrowser(controller: Controller_MainWindow) -> None:
     ctrl = controller
-    with patch("lightsheet.gui.shell.controller.webbrowser.open_new") as mock_open:
+    with patch("lightsheet.gui.shell.ui_delegates.webbrowser.open_new") as mock_open:
         ctrl.open_help()
     mock_open.assert_called_once()
 
 
 def test_open_properties_dialog(controller: Controller_MainWindow) -> None:
     ctrl = controller
-    with patch("lightsheet.gui.shell.controller.Properties_Dialog") as MockDialog:
+    with patch("lightsheet.gui.shell.ui_delegates.Properties_Dialog") as MockDialog:
         ctrl.open_properties_dialog()
     mock_dlg = MockDialog.return_value
     mock_dlg.setAttribute.assert_called_once()

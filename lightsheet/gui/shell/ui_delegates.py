@@ -2,15 +2,22 @@
 
 The shell's safety-critical surface (E-stop kill path, hardware bring-up,
 shutdown ordering) stays in ``controller.py``; this module carries the
-pure presentation delegates — theme toggles, pane show/hide, message-log
-printing, progress/mode-badge mirroring, channel tint, and the trajectory
-dock slots — as a plain mixin so ``Controller_MainWindow`` reads as
+pure presentation delegates — theme toggles, pane show/hide, mode-badge
+and progress mirroring, channel tint, and the stack-param persistence
+helpers — as a plain mixin so ``Controller_MainWindow`` reads as
 safety + lifecycle code only.
 
 The mixin has no ``__init__`` and no ``QObject`` base: methods resolve on
 the shell instance through the MRO, and ``self.`` attribute reads work
 identically to their former in-class form. ``@Slot`` decorators are kept
 verbatim so every bound-method ``connect`` site is unchanged.
+
+Receivers of signals that workers emit from their ``QThread``
+(``sig_message``, ``sig_progress_update``, ``sig_*_trajectory``) must
+stay declared in ``Controller_MainWindow``'s own class body: PySide6
+classifies a bound method as a real queued slot only while it is defined
+on the receiver's class, and a mixin-inherited method would run on the
+emitting worker thread instead.
 """
 
 from __future__ import annotations
@@ -152,15 +159,6 @@ class _ShellUiDelegatesMixin:
                     float(step_s)
                 )
 
-    @Slot(str)
-    def updateUi_message_printer(self: Controller_MainWindow, message: str) -> None:
-        """Print text in console, in controller text box and in status bar"""
-        logger.info(message)
-        self.ui.statusbar.showMessage(message, 2000)
-        self.ui.plainTextEdit_messageLog.appendPlainText(message)
-        self.ui.plainTextEdit_messageLog.verticalScrollBar().setValue(
-            self.ui.plainTextEdit_messageLog.verticalScrollBar().maximum()
-        )
 
     @Slot(QAbstractButton)
     def updateUi_save_format_changed(
@@ -409,47 +407,6 @@ class _ShellUiDelegatesMixin:
             text = text + " · MULTI-CH"
         self.ui.label_modeBadge.setText(text)
 
-    @Slot(int)
-    def _on_progress_update(self: Controller_MainWindow, value: int) -> None:
-        """Mirror sig_progress_update into the mode badge during a stack
-        run so the operator sees 'STACK RUNNING — plane {n}/{N}' without
-        looking at the status bar (audit #12). The emitted value counts
-        planes completed in the current run (current_plane - start_plane);
-        the badge adds ``_start_plane`` back so it always shows the
-        absolute plane index of the stack. Outside a stack run, the
-        progress value is not shown in the badge (the badge reflects the
-        mode, set by the mode-start/complete sites). During a queue run,
-        the badge appends the row index so the operator sees which row is
-        acquiring."""
-        if getattr(self, "stack_mode_started", False):
-            total = int(getattr(self, "number_of_planes", 0))
-            start_plane = int(getattr(self, "_start_plane", 0))
-            plane = value + start_plane
-            mgr = getattr(self, "stack_panel", None)
-            qm = getattr(mgr, "table_manager", None) if mgr else None
-            q_row = int(getattr(qm, "_queue_row_index", 0)) + 1 if qm else 0
-            q_total = int(getattr(qm, "_queue_rows_total", 0)) if qm else 0
-            mode = "FOCUS" if getattr(self, "focus_mode_started", False) else "STACK"
-            # A requested-but-not-yet-completed pause must keep showing
-            # PAUSED — the per-plane progress emit would otherwise
-            # overwrite the badge back to RUNNING until teardown lands.
-            if self.pause_requested.is_set():
-                run_state = "PAUSED"
-            elif start_plane > 0:
-                run_state = "RESUMING"
-            else:
-                run_state = "RUNNING"
-            if qm is not None and getattr(qm, "_queue_active", False):
-                self._update_mode_badge(
-                    mode,
-                    run_state,
-                    plane=plane,
-                    total=total,
-                    queue_row=q_row,
-                    queue_total=q_total,
-                )
-            else:
-                self._update_mode_badge(mode, run_state, plane=plane, total=total)
 
     def _cache_auto_laser_flags(self: Controller_MainWindow) -> None:
         """Commit the auto-laser checkboxes to the model. GUI thread only.
@@ -602,58 +559,4 @@ class _ShellUiDelegatesMixin:
         the second auto-laser."""
         self._apply_channel_tint(channel_idx)
 
-    @Slot(int, float, float, float, float, str, bool, bool)
-    def _on_adaptive_trajectory(
-        self: Controller_MainWindow,
-        plane_idx: int,
-        intensity: float,
-        exposure_s: float,
-        power1_mw: float,
-        power2_mw: float,
-        control_variable_active: str,
-        reacquired: bool,
-        power_fallback: bool,
-    ) -> None:
-        """GUI-thread slot for the per-plane adaptive trajectory signal.
 
-        The worker emits ``sig_adaptive_trajectory`` (a queued
-        ``Signal``); this shell slot delegates to the presentation
-        controller. The worker NEVER calls pyqtgraph directly."""
-        self._adaptive_last_plane = plane_idx
-        self._adaptive_dock_controller.append_sample(
-            plane_idx=plane_idx,
-            intensity=intensity,
-            exposure_s=exposure_s,
-            power1_mw=power1_mw,
-            power2_mw=power2_mw,
-            control_variable_active=control_variable_active,
-            reacquired=reacquired,
-            power_fallback=power_fallback,
-        )
-
-    @Slot(int, float, float, float, float)
-    def _on_focus_trajectory(
-        self: Controller_MainWindow,
-        block_idx: int,
-        stage_pos_mm: float,
-        feedforward_camera_pos_mm: float,
-        residual_mm: float,
-        applied_camera_pos_mm: float,
-    ) -> None:
-        """GUI-thread slot for the per-block focus trajectory signal.
-
-        The worker emits ``sig_focus_trajectory`` (a queued ``Signal``);
-        this shell slot delegates to the presentation controller. The
-        worker NEVER calls pyqtgraph directly.
-
-        The X-axis is hardcoded to the block index ("Block") in this
-        phase; the Stage position (mm) X-axis option has been removed.
-        """
-        self._focus_last_block = block_idx
-        self._focus_dock_controller.append_sample(
-            block_idx=block_idx,
-            stage_pos_mm=stage_pos_mm,
-            feedforward_camera_pos_mm=feedforward_camera_pos_mm,
-            residual_mm=residual_mm,
-            applied_camera_pos_mm=applied_camera_pos_mm,
-        )

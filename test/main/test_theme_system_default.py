@@ -478,7 +478,7 @@ def test_light_theme_slot_persists_to_config(
     """
     ctrl = controller
     captured: list[tuple] = []  # ty: ignore[missing-type-argument]
-    import lightsheet.gui.shell.controller as ctrl_mod
+    import lightsheet.gui.shell.ui_delegates as ctrl_mod
 
     monkeypatch.setattr(
         ctrl_mod,
@@ -499,7 +499,7 @@ def test_dark_theme_slot_persists_to_config(
 ) -> None:
     ctrl = controller
     captured: list[tuple] = []  # ty: ignore[missing-type-argument]
-    import lightsheet.gui.shell.controller as ctrl_mod
+    import lightsheet.gui.shell.ui_delegates as ctrl_mod
 
     monkeypatch.setattr(
         ctrl_mod,
@@ -520,7 +520,7 @@ def test_follow_system_theme_slot_persists_to_config(
 ) -> None:
     ctrl = controller
     captured: list[tuple] = []  # ty: ignore[missing-type-argument]
-    import lightsheet.gui.shell.controller as ctrl_mod
+    import lightsheet.gui.shell.ui_delegates as ctrl_mod
 
     monkeypatch.setattr(
         ctrl_mod,

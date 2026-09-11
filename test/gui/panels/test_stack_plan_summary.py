@@ -127,7 +127,7 @@ def test_controller_persists_stack_params_on_close(
         # Patch cfg_write to capture the written dict.
         written: list[tuple] = []  # ty: ignore[missing-type-argument]
         with patch(
-            "lightsheet.gui.shell.controller.cfg_write",
+            "lightsheet.gui.shell.ui_delegates.cfg_write",
             lambda *a, **k: written.append((a, k)),
         ):
             ctrl._save_stack_params()
@@ -155,7 +155,7 @@ def test_load_stack_params_round_trips_mm_to_um(
     ctrl._demo_mode = False
     try:
         with patch(
-            "lightsheet.gui.shell.controller.cfg_read",
+            "lightsheet.gui.shell.ui_delegates.cfg_read",
             return_value={
                 "StackLastStart": "3.2",
                 "StackLastEnd": "15.6",
@@ -194,7 +194,7 @@ def test_load_stack_params_discards_out_of_range_values(
     ctrl._demo_mode = False
     try:
         with patch(
-            "lightsheet.gui.shell.controller.cfg_read",
+            "lightsheet.gui.shell.ui_delegates.cfg_read",
             return_value={
                 "StackLastStart": "3200.0000",
                 "StackLastEnd": "678.9",
