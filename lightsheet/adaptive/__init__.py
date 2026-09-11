@@ -16,7 +16,7 @@ from lightsheet.adaptive.controller import (
     pi_residual,
     should_reacquire,
 )
-from lightsheet.adaptive.intensity import frame_intensity_pct
+from lightsheet.adaptive.intensity import frame_intensity_pct, frame_intensity_pcts
 from lightsheet.adaptive.types import (
     AdaptiveCommand,
     AdaptiveConfig,
@@ -30,6 +30,7 @@ __all__ = [
     "AdaptiveSample",
     "fit_pilot_trajectory",
     "frame_intensity_pct",
+    "frame_intensity_pcts",
     "pi_residual",
     "should_reacquire",
 ]

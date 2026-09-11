@@ -199,7 +199,7 @@ class _StackAdaptiveMixin:
         adaptive is on, both channels' intensities are measured; the
         brighter channel drives the shared exposure.
         """
-        from lightsheet.adaptive.intensity import frame_intensity_pct
+        from lightsheet.adaptive.intensity import frame_intensity_pcts
         from lightsheet.adaptive.types import AdaptiveSample
 
         # Adaptive-off: no trajectory emission — the fixed stack path
@@ -218,20 +218,17 @@ class _StackAdaptiveMixin:
         # statistic drives the PI feedback; a separate higher percentile
         # (default max) drives the hard saturation guard so a single
         # saturated pixel trips it even when the PI percentile is low.
+        # Both percentiles share one histogram pass per frame.
+        query = (cfg.intensity_percentile, cfg.saturation_percentile)
         if self._multi_channel:
             frames = self._shell.reconstructed_frames
             intensities = []
             sat_intensities = []
             for laser in self._shell.lasers:
                 frame = frames.get(int(laser.wavelength)) if frames else None
-                intensities.append(
-                    frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)
-                )
-                sat_intensities.append(
-                    frame_intensity_pct(
-                        frame, cfg.sensor_max, cfg.saturation_percentile
-                    )
-                )
+                intensity, sat = frame_intensity_pcts(frame, cfg.sensor_max, query)
+                intensities.append(intensity)
+                sat_intensities.append(sat)
             # The brighter channel drives the shared exposure.
             brighter_idx = max(
                 range(len(intensities)),
@@ -240,13 +237,11 @@ class _StackAdaptiveMixin:
             saturation_intensity = sat_intensities[brighter_idx]
         else:
             frame = self._shell.reconstructed_frame
-            intensities = [
-                frame_intensity_pct(frame, cfg.sensor_max, cfg.intensity_percentile)
-            ]
-            brighter_idx = 0
-            saturation_intensity = frame_intensity_pct(
-                frame, cfg.sensor_max, cfg.saturation_percentile
+            intensity, saturation_intensity = frame_intensity_pcts(
+                frame, cfg.sensor_max, query
             )
+            intensities = [intensity]
+            brighter_idx = 0
 
         # Record the trajectory sample.
         sample = AdaptiveSample(

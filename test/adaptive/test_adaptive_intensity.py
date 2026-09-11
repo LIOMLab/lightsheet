@@ -17,7 +17,7 @@ import time
 import numpy as np
 import pytest
 
-from lightsheet.adaptive.intensity import frame_intensity_pct
+from lightsheet.adaptive.intensity import frame_intensity_pct, frame_intensity_pcts
 
 
 def test_intensity_none_returns_zero() -> None:
@@ -85,6 +85,32 @@ def test_intensity_benchmark_under_50ms() -> None:
     assert elapsed_ms < 50.0, (
         f"p99.99 on 2048x2048 took {elapsed_ms:.1f} ms min-of-5 (budget 50 ms)"
     )
+
+
+def test_intensity_pcts_matches_single_calls() -> None:
+    # The shared-histogram variant must return exactly what the
+    # single-percentile calls return — the adaptive loop relies on the
+    # (intensity, saturation) pair being interchangeable.
+    rng = np.random.default_rng(7)
+    frame = rng.integers(0, 65536, size=(512, 512), dtype=np.uint16)
+    query = (99.99, 100.0, 50.0)
+    assert frame_intensity_pcts(frame, 65535, query) == [
+        frame_intensity_pct(frame, 65535, p) for p in query
+    ]
+
+
+def test_intensity_pcts_none_and_empty_return_zeros() -> None:
+    assert frame_intensity_pcts(None, 65535, (99.99, 100.0)) == [0.0, 0.0]
+    empty = np.array([], dtype=np.uint16)
+    assert frame_intensity_pcts(empty, 65535, (99.99, 100.0)) == [0.0, 0.0]
+
+
+def test_intensity_pcts_float_frame_falls_back() -> None:
+    frame = np.array([[0.0, 0.5], [1.0, 1.0]])
+    query = (50.0, 100.0)
+    assert frame_intensity_pcts(frame, 1, query) == [
+        frame_intensity_pct(frame, 1, p) for p in query
+    ]
 
 
 def test_intensity_catches_small_saturated_feature() -> None:
