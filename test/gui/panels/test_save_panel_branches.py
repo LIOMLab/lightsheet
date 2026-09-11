@@ -46,6 +46,8 @@ from pytestqt.qtbot import QtBot
 pytest.importorskip("PySide6")
 
 if TYPE_CHECKING:
+    from PySide6.QtWidgets import QWidget
+
     from lightsheet.gui.shell.controller import Controller_MainWindow
 
 
@@ -96,7 +98,7 @@ def _write_zarr_store(
         acq.attrs["Sample Name"] = "test-sample"
         acq.attrs["exposure_time_s"] = 0.05
     if write_ome:
-        root.attrs["ome"] = ome
+        root.attrs["ome"] = ome  # ty: ignore[invalid-assignment]
 
 
 @contextlib.contextmanager
@@ -154,9 +156,9 @@ def test_init_applies_field_spec_to_matching_widget(
 
     real_setup = Ui_SavePanel.setupUi
 
-    def _setup_then_add(ui_self: object, panel: object) -> None:
+    def _setup_then_add(ui_self: Ui_SavePanel, panel: QWidget) -> None:
         real_setup(ui_self, panel)
-        ui_self.fake_field = _FakeField()
+        ui_self.fake_field = _FakeField()  # ty: ignore[unresolved-attribute]
 
     monkeypatch.setattr(Ui_SavePanel, "setupUi", _setup_then_add)
     monkeypatch.setattr(save_panel_mod, "FIELD_SPECS", {"fake_field": spec})
@@ -509,8 +511,10 @@ def test_select_dataset_hdf5_displays_attributes_and_image(
     # First item's attributes table populated: 2 rows (Sample Name +
     # exposure_time_s), header + values.
     assert ui.tableWidget_fileAttributes.rowCount() == 2
-    assert ui.tableWidget_fileAttributes.item(0, 0).text() == "Sample Name"
-    assert ui.tableWidget_fileAttributes.item(0, 1).text() == "branch-sample"
+    item_00 = ui.tableWidget_fileAttributes.item(0, 0)
+    item_01 = ui.tableWidget_fileAttributes.item(0, 1)
+    assert item_00 is not None and item_00.text() == "Sample Name"
+    assert item_01 is not None and item_01.text() == "branch-sample"
     # One figure per selected dataset.
     assert figure.call_count == 2
     log = ctrl.ui.plainTextEdit_messageLog.toPlainText()
