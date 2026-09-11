@@ -12,10 +12,12 @@ can cause response misattribution. Mitigations: a per-instance lock serializing
 all serial access, an inter-command gap, and an input-buffer flush before every
 command.
 
-This is a Class IIIB laser. ``set_power`` clamps to ``max_power`` (from
-config.ini `[iBeam] Max Power`) as a physical-safety control enforced inside
-the HAL so any caller is bounded. Two-layer clamp: the adapter clamps mW, the
-inner ``IBeam.set_power`` clamps µW independently.
+This is a Class IIIB laser. ``set_power`` clamps to ``max_power`` (the
+``max_power_uw`` constructor arg — the registry passes ``[Lasers] Laser2 Max
+Power`` converted to µW; the standalone-serial path falls back to the
+150000 µW / 150 mW diode hard limit) as a physical-safety control enforced
+inside the HAL so any caller is bounded. Two-layer clamp: the adapter
+clamps mW, the inner ``IBeam.set_power`` clamps µW independently.
 
 ``off()`` is synchronous — no thread/queue offload. The GUI-thread E-stop
 handler calls this directly; offloading would break the synchronous-off safety
@@ -53,14 +55,13 @@ class IBeam:
     # 647 nm is the recorded capture wavelength)
     _cfg_settings["Wavelength"] = "647"
     _cfg_settings["Power"] = "0"  # In uW
-    _cfg_settings["Max Power"] = "150000"  # In uW (150 mW diode limit, rig-confirmed)
     # Per-readline timeout. The firmware sends data/error lines in <30ms but
     # takes ~3s to send the CMD> prompt. A short timeout per readline lets
     # data lines arrive; a timeout (b"") signals the response is complete.
     # The late CMD> prompt is flushed by reset_input_buffer on the next command.
     _cfg_settings["Read Timeout"] = "0.2"  # seconds per readline
 
-    def __init__(self, port: str | None = None) -> None:
+    def __init__(self, port: str | None = None, max_power_uw: int = 150000) -> None:
         # HAL error status (mirrors lightsheet/lasers.py and lightsheet/etls.py).
         self.error = 0
         self.error_message = ""
@@ -73,7 +74,12 @@ class IBeam:
         self.channel = int(self.cfg_settings["Channel"])
         self.wavelength = int(self.cfg_settings["Wavelength"])
         self._power = int(self.cfg_settings["Power"])
-        self.max_power = int(self.cfg_settings["Max Power"])
+        # µW ceiling arrives via the constructor — the registry passes
+        # [Lasers] Laser2 Max Power (mW) converted with round(mW * 1000).
+        # The 150000 default is the standalone-serial fallback: the
+        # 150 mW diode hard limit, so an unclamped serial path can never
+        # exceed the hardware bound.
+        self.max_power = int(max_power_uw)
         self._read_timeout = float(self.cfg_settings["Read Timeout"])
 
         self.ser = None
@@ -445,12 +451,19 @@ class IBeamSmartLaser(ILaser):
         label: str = "Laser 2 (647 nm)",
         analog_ceiling_mw: float | None = None,
         port: str | None = None,
+        max_power_uw: int | None = None,
     ) -> None:
         # The inner serial engine. __init__ does NOT open the serial port —
         # the controller's hardware_init is responsible for calling open().
         # The optional `port` lets DeviceRegistry pass a live USB-serial
         # resolved value, overriding config.ini [iBeam] Port.
-        self._ibeam = IBeam(port=port)
+        # max_power_uw=None -> the standalone-serial fallback ceiling
+        # (150000 µW = the 150 mW diode hard limit); the registry passes
+        # the authoritative ceiling from [Lasers] Laser2 Max Power.
+        self._ibeam = IBeam(
+            port=port,
+            max_power_uw=max_power_uw if max_power_uw is not None else 150000,
+        )
 
         # mW-canonical ILaser surface. The inner IBeam reports wavelength in
         # nm and max_power in µW; the adapter converts max_power to mW.

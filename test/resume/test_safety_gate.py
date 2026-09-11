@@ -85,8 +85,8 @@ def test_clean_manifest_produces_no_errors(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_config_fingerprint_diff_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     _no_config_validation(monkeypatch)
-    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
-    live = {"iBeam": {"Max Power": "120000"}}
+    manifest = _manifest(safety_config={"Lasers": {"Laser2 Max Power": "140"}})
+    live = {"Lasers": {"Laser2 Max Power": "150"}}
     findings = ResumeSafetyGate.from_manifest(manifest, live, _FakeMotors({}))
     assert findings.errors == []
     assert any("Max Power" in w for w in findings.warnings)
@@ -96,10 +96,26 @@ def test_matching_fingerprint_produces_no_diff_warning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _no_config_validation(monkeypatch)
-    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
-    live = {"iBeam": {"Max Power": "100000"}}
+    manifest = _manifest(safety_config={"Lasers": {"Laser2 Max Power": "150"}})
+    live = {"Lasers": {"Laser2 Max Power": "150"}}
     findings = ResumeSafetyGate.from_manifest(manifest, live, _FakeMotors({}))
     assert not any("Max Power" in w for w in findings.warnings)
+
+
+def test_stale_ibeam_fingerprint_warns_not_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A manifest fingerprinted on the retired ``iBeam.Max Power`` key
+    (written by pre-consolidation acquisitions) produces the benign
+    'key absent from the live config' warning — not an error. The Laser 2
+    ceiling is now fingerprinted as ``Lasers.Laser2 Max Power``."""
+    _no_config_validation(monkeypatch)
+    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
+    live = {"Lasers": {"Laser2 Max Power": "150"}}
+    findings = ResumeSafetyGate.from_manifest(manifest, live, _FakeMotors({}))
+    assert findings.errors == []
+    assert any("absent from the live config" in w for w in findings.warnings)
+    assert findings.has_differences is True
 
 
 def test_live_config_errors_block_resume(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,11 +123,11 @@ def test_live_config_errors_block_resume(monkeypatch: pytest.MonkeyPatch) -> Non
         gate_mod,
         "collect_config_errors",
         lambda sections: ConfigValidationResult(
-            errors=["[iBeam] Max Power = 200000: out of range."]
+            errors=["[Lasers] Laser2 Max Power = 200: out of range."]
         ),
     )
     findings = ResumeSafetyGate.from_manifest(
-        _manifest(), {"iBeam": {}}, _FakeMotors({})
+        _manifest(), {"Lasers": {}}, _FakeMotors({})
     )
     assert any("Max Power" in e for e in findings.errors)
 
@@ -176,12 +192,15 @@ def test_unopenable_file_warns_and_falls_back(
 def test_collect_safety_config_extracts_safety_keys(tmp_path: Path) -> None:
     ini = tmp_path / "config.ini"
     ini.write_text(
-        "[iBeam]\nMax Power = 150000\nPort = COM1\n"
+        "[Lasers]\nLaser1 Max Power = 107.5\nLaser2 Max Power = 150\n"
         "[Motors]\nHorizontal Limit High = 41.0\n",
         encoding="utf-8",
     )
     result = collect_safety_config(str(ini), None)
-    assert result["iBeam"] == {"Max Power": "150000"}
+    assert result["Lasers"] == {
+        "Laser1 Max Power": "107.5",
+        "Laser2 Max Power": "150",
+    }
     assert result["Motors"] == {"Horizontal Limit High": "41.0"}
 
 

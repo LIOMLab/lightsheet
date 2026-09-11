@@ -333,6 +333,9 @@ def test_registry_composes_l2_daq_with_readback(
     assert l2.terminal == "/Dev1/ao3"  # ty: ignore[unresolved-attribute]
     assert l2.wavelength == 647  # ty: ignore[unresolved-attribute]
     assert l2.max_power == 150.0  # ty: ignore[unresolved-attribute]
+    # L1 ceiling reads [Lasers] Laser1 Max Power directly in mW —
+    # 107.5, not 107.5 * 60.0 (mW-per-Volt) = 6450.
+    assert l1.max_power == pytest.approx(107.5)  # ty: ignore[unresolved-attribute]
     # L2 uses an InvertedVoltMap; L1 keeps a LinearVoltMap.
     assert isinstance(l2._volt_map, InvertedVoltMap)  # ty: ignore[unresolved-attribute]
     assert l2._volt_map.off_volts == pytest.approx(5.0)  # ty: ignore[unresolved-attribute]
@@ -349,6 +352,9 @@ def test_registry_composes_l2_daq_with_readback(
     # The iBeam readback_backend was constructed with analog_ceiling_mw = Laser2
     # Max Power (the sole L2 ceiling source).
     assert ibeam_kwargs.get("analog_ceiling_mw") == pytest.approx(150.0)
+    # The same sole L2 ceiling reaches the serial backend's µW clamp via
+    # the max_power_uw ctor arg — round(150 mW * 1000).
+    assert ibeam_kwargs.get("max_power_uw") == 150000
     # SigGen was constructed with only the camera — no L2 injection.
     assert len(siggen_calls) == 1
     assert not hasattr(siggen_calls[0], "laser2_daq")
@@ -578,7 +584,7 @@ def test_ibeam_smart_laser_methods_remain_present() -> None:
     standalone serial-only usage path."""
     from lightsheet.hal.real.ibeam_smart import IBeamSmartLaser
 
-    l2 = IBeamSmartLaser(label="Laser 2 (647 nm)")
+    l2 = IBeamSmartLaser(label="Laser 2 (647 nm)", max_power_uw=150000)
     assert callable(l2.on)
     assert callable(l2.off)
     assert callable(l2.set_power)

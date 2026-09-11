@@ -6,8 +6,12 @@ The strict baseline tier (extra='forbid') rejects unknown/typo'd keys instead
 of silently falling into the configparser fallback (the PKG-04 root-cause bug).
 The lax overlay tier (extra='ignore') tolerates extra keys in the rig-specific
 overlay so rig calibration freedom is preserved. Safety-critical keys
-([iBeam] Max Power, [Motors] * Limit High) are REJECTED (not clamped)
-out-of-range in BOTH tiers via the same field_validator. Non-safety
+([Motors] * Limit High, [Lasers] Laser{1,2} Max Power) are REJECTED (not
+clamped) out-of-range in BOTH tiers via the same field_validator. The iBeam
+µW ceiling is not a schema key — it derives from [Lasers] Laser2 Max Power
+and reaches the serial backend via the registry's max_power_uw constructor
+arg; a stale [iBeam] Max Power key is rejected as an unknown key.
+Non-safety
 out-of-range values (galvo/ETL amplitudes, negative exposure) are collected
 as WARNings. Validation is collect-all: two independent errors surface in one
 pass, not fail-fast.
@@ -49,7 +53,6 @@ def _ibeam_valid() -> dict[str, Any]:
         "Channel": 1,
         "Wavelength": 647,
         "Power": 0,
-        "Max Power": 150000,
         "Status Poll Interval": 1.0,
     }
 
@@ -184,22 +187,27 @@ def test_lax_overlay_tolerates_extra_key() -> None:
     data = {**_ibeam_valid(), "Calibration Note": "rig-specific tweak"}
     # Should construct without error — the extra key is ignored.
     settings = IBeamSettingsOverlay(**data)
-    assert settings.max_power == 150000
+    assert settings.port == "COM4"
 
 
-# --- Test 3: safety-key (Max Power) rejected in BOTH tiers ---
+# --- Test 3: stale [iBeam] Max Power key rejected by the strict tier ---
 
 
-def test_max_power_rejected_in_both_tiers() -> None:
-    """[iBeam] Max Power = 200000 (>150000 µW = 150 mW iBeam hard limit)
-    raises ValidationError on BOTH the strict baseline and the lax overlay
-    — safety-key rejection is tier-independent."""
-    strict_data = {**_ibeam_valid(), "Max Power": 200000}
-    overlay_data = {**_ibeam_valid(), "Max Power": 200000}
-    with pytest.raises(ValidationError):
-        _construct_model(IBeamSettings, **strict_data)
-    with pytest.raises(ValidationError):
-        IBeamSettingsOverlay(**overlay_data)
+def test_stale_ibeam_max_power_rejected_by_strict_tier() -> None:
+    """A config.ini still carrying the retired ``[iBeam] Max Power`` key is
+    rejected by the strict baseline tier via ``extra='forbid'`` — the
+    removed µW ceiling key fails closed instead of being silently ignored.
+    The sole Laser 2 ceiling now lives at ``[Lasers] Laser2 Max Power``
+    (mW) and reaches the serial backend via the registry's max_power_uw
+    constructor arg."""
+    data = {**_ibeam_valid(), "Max Power": 150000}
+    with pytest.raises(ValidationError) as exc_info:
+        _construct_model(IBeamSettings, **data)
+    err_types = [e["type"] for e in exc_info.value.errors()]
+    assert any("extra" in t or "forbidden" in t for t in err_types), (
+        f"expected an extra_forbidden error for the stale Max Power key, "
+        f"got {err_types}"
+    )
 
 
 # --- Test 4: safety-key (Vertical Limit High) rejected in BOTH tiers ---
@@ -221,9 +229,9 @@ def test_vertical_limit_high_rejected_in_both_tiers() -> None:
 
 def test_valid_ibeam_constructs_without_error() -> None:
     """A valid [iBeam] dict built from config.ini's actual values
-    (Max Power = 150000) constructs without error on the strict tier."""
+    constructs without error on the strict tier."""
     settings = _construct_model(IBeamSettings, **_ibeam_valid())
-    assert settings.max_power == 150000
+    assert not hasattr(settings, "max_power")
     assert settings.port == "COM4"
 
 
@@ -232,8 +240,9 @@ def test_valid_ibeam_constructs_without_error() -> None:
 
 def test_collect_config_errors_surfaces_both_errors() -> None:
     """collect_config_errors called with TWO independently-broken sections
-    (bad Max Power + bad Vertical Limit High) returns a result containing
-    BOTH errors, not just the first — proves collect-all, not fail-fast."""
+    (stale iBeam Max Power key + bad Vertical Limit High) returns a result
+    containing BOTH errors, not just the first — proves collect-all, not
+    fail-fast."""
     sections = {
         "iBeam": {**_ibeam_valid(), "Max Power": 200000},
         "Motors": {**_motors_valid(), "Vertical Limit High": 50.0},
@@ -537,17 +546,6 @@ def test_laser2_config_rejects_nonpositive_mw_per_volt_both_tiers() -> None:
             _construct_model(cls, **{**_lasers_valid(), "Laser2 mW per Volt": -30.0})
 
 
-def test_laser2_config_ibeam_max_power_validator_unchanged() -> None:
-    """The existing iBeam 150000 uW validator remains independently enforced
-    — adding Laser2 fields to LasersSettings does not weaken the iBeam
-    rejection."""
-    for cls in (IBeamSettings, IBeamSettingsOverlay):
-        with pytest.raises(ValidationError) as exc_info:
-            _construct_model(cls, **{**_ibeam_valid(), "Max Power": 200000})
-        msgs = " ".join(str(e["msg"]) for e in exc_info.value.errors())
-        assert "150000" in msgs
-
-
 def test_laser2_config_strict_rejects_missing_laser2_keys() -> None:
     """The strict tier rejects a config missing the Laser2 keys (required
     fields, no defaults)."""
@@ -636,18 +634,18 @@ def test_generated_overlay_ignores_env_source() -> None:
 
     from lightsheet.config_schema import IBeamSettingsOverlay
 
-    env_backup = os.environ.get("IBEAM__MAX_POWER")
-    os.environ["IBEAM__MAX_POWER"] = "200000"
+    env_backup = os.environ.get("IBEAM__PORT")
+    os.environ["IBEAM__PORT"] = "COM99"
     try:
         # The env source is not registered, so the valid init value stays
-        # in force and the out-of-range env value is ignored.
+        # in force and the stray env value is ignored.
         settings = IBeamSettingsOverlay(**_ibeam_valid())
-        assert settings.max_power == 150000
+        assert settings.port == "COM4"
     finally:
         if env_backup is None:
-            os.environ.pop("IBEAM__MAX_POWER", None)
+            os.environ.pop("IBEAM__PORT", None)
         else:
-            os.environ["IBEAM__MAX_POWER"] = env_backup
+            os.environ["IBEAM__PORT"] = env_backup
 
 
 # --- Image File Format (three-format contract) -----------------------------

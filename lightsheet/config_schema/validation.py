@@ -81,6 +81,21 @@ _SECTION_MODELS: dict[str, tuple[type[BaseSettings], type[BaseSettings]]] = {
 # validates using the model defaults. Sections NOT in this set are required.
 _OPTIONAL_SECTIONS: frozenset[str] = frozenset({"Adaptive", "Autofocus"})
 
+# Retired config keys that must still surface to the strict tier. The
+# alias-template read in load_sections_from_ini only captures keys the
+# model declares — necessary because the file legitimately carries
+# non-model keys (e.g. [Controller] StackLast* persisted at runtime) —
+# so a file still carrying a deliberately-retired key would otherwise be
+# silently dropped. Passing it through instead lets the strict model's
+# extra='forbid' reject it at startup: the operator sees the retired key
+# listed in the modal error and removes it (fail-closed).
+# The iBeam µW ceiling key was retired — the L2 ceiling is now the
+# single [Lasers] Laser2 Max Power (mW) source.
+_RETIRED_IBEAM_CEILING_KEY = "Max Power"
+_STALE_KEYS: dict[str, frozenset[str]] = {
+    "iBeam": frozenset({_RETIRED_IBEAM_CEILING_KEY}),
+}
+
 
 # Non-safety recommended-range WARN checks. Each entry maps a section name
 # to a list of (field_name, check, violation_phrase) tuples. The check runs
@@ -227,6 +242,15 @@ def load_sections_from_ini(
             defaults_template[key] = ""
         # cfg_read mutates the passed dict in place, so pass a fresh copy.
         baseline = cfg_read(baseline_path, section_name, dict(defaults_template))
+        # Surface retired keys present in the raw file — the alias
+        # template above drops every undeclared key, which would silently
+        # ignore a stale safety key instead of letting the strict model
+        # reject it.
+        for stale_key in _STALE_KEYS.get(section_name, ()):
+            if _base_cfg.has_section(section_name) and (
+                stale_key in _base_cfg[section_name]
+            ):
+                baseline[stale_key] = _base_cfg[section_name][stale_key]
         if overlay_path is not None and Path(overlay_path).exists():
             overlay = cfg_read(overlay_path, section_name, dict(defaults_template))
             # Only override baseline with keys the overlay file actually
@@ -245,6 +269,9 @@ def load_sections_from_ini(
                 else set()
             )
             baseline.update({k: v for k, v in overlay.items() if k in present_keys})
+            for stale_key in _STALE_KEYS.get(section_name, ()):
+                if stale_key in present_keys:
+                    baseline[stale_key] = _ov_cfg[section_name][stale_key]
         sections[section_name] = baseline
     return sections
 

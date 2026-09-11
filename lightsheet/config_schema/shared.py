@@ -11,11 +11,6 @@ from typing import Any, cast
 from pydantic_settings import BaseSettings
 
 # --- Safety-critical constants ---
-# iBeam Smart 640 hard limit: 150 mW = 150000 uW. The schema validates Max
-# Power, not wavelength — 640 nm is the physical diode emission peak; 647 nm
-# is the recorded capture/detection wavelength.
-_IBEAM_MAX_MW: int = 150000  # uW
-
 # L2 DAQLaser ceiling: 150 mW full-scale at 30.0 mW/V = 5.0 V on /Dev7/ao1.
 # The schema rejects a Laser2 Max Power above this ceiling and a nonpositive
 # mW per Volt conversion factor in both tiers — these are safety-critical
@@ -76,16 +71,6 @@ def _make_overlay(strict_cls: type[_NoEnvBaseSettings]) -> type[Any]:
         type[Any],
         new_class(overlay_name, (strict_cls,), exec_body=_exec_body),
     )
-
-
-def _validate_ibeam_max_power(v: int) -> int:
-    if v <= 0:
-        raise ValueError(f"Max Power {v} uW must be a positive power value")
-    if v > _IBEAM_MAX_MW:
-        raise ValueError(
-            f"Max Power {v} uW exceeds iBeam hard limit {_IBEAM_MAX_MW} uW (150 mW)"
-        )
-    return v
 
 
 def _validate_vertical_limit_high(v: float) -> float:

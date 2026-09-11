@@ -56,7 +56,7 @@ def _make_open_ibeam_smart(
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b"[OK]\r\n"
-        adapter = ibeam_smart_mod.IBeamSmartLaser()
+        adapter = ibeam_smart_mod.IBeamSmartLaser(max_power_uw=150000)
         adapter._ibeam.open()
     # Swap in the test-specific readline behaviour for the adapter calls.
     if readline_side_effect is not None:
@@ -103,7 +103,7 @@ def test_ibeam_smart_construction_mw_canonical_and_lock_identity() -> None:
     daemon-thread write paths that acquire ``self.lasers[i]._lock`` and the
     inner ``_send_cmd`` lock are the same object.
     """
-    adapter = ibeam_smart_mod.IBeamSmartLaser()
+    adapter = ibeam_smart_mod.IBeamSmartLaser(max_power_uw=150000)
     # mW-canonical surface (D-01).
     assert adapter.wavelength == 647
     assert adapter.max_power == 150.0  # 150000 uW / 1000

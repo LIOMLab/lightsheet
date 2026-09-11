@@ -219,8 +219,10 @@ class DeviceRegistry:
             terminal=l1_terminal,
             wavelength=int(_l_cfg["Laser1 Wavelength"]),
             mw_per_volt=float(_l_cfg["Laser1 mW per Volt"]),
-            max_power_mw=float(_l_cfg["Laser1 Max Power"])
-            * float(_l_cfg["Laser1 mW per Volt"]),
+            # The ceiling is already in mW — do not multiply by the
+            # mW-per-Volt conversion factor (that produced 6450 mW from a
+            # 107.5 mW ceiling).
+            max_power_mw=float(_l_cfg["Laser1 Max Power"]),
             label="Laser 1 (555 nm)",
             calibration_curve=_calibration_curve,
         )
@@ -233,10 +235,11 @@ class DeviceRegistry:
         # E-stop off() writes 5 V (true-off), NOT 0 V (which would drive
         # the laser to MAXIMUM power on an inverted L2).
         #
-        # Laser2 Max Power is the SOLE L2 ceiling: it supplies both the
-        # DAQLaser mW ceiling (InvertedVoltMap.max_power_mw) AND the CH2
-        # serial ceiling (IBeamSmartLaser.analog_ceiling_mw). A single
-        # config value bounds both the DAQ and serial paths.
+        # Laser2 Max Power is the SOLE L2 ceiling: it supplies the
+        # DAQLaser mW ceiling (InvertedVoltMap.max_power_mw), the CH2
+        # serial ceiling (IBeamSmartLaser.analog_ceiling_mw), AND the
+        # serial backend's µW clamp (mW x 1000). A single config value
+        # bounds both the DAQ and serial paths.
         #
         # The retained iBeam serial backend is attached as the
         # readback_backend — used for channel enable at open (via the
@@ -250,6 +253,7 @@ class DeviceRegistry:
             label="Laser 2 (647 nm)",
             analog_ceiling_mw=_l2_max_power_mw,
             port=resolved["Toptica iBeam Smart 640nm laser"],
+            max_power_uw=round(_l2_max_power_mw * 1000),
         )
         l2 = DAQLaser(
             terminal=l2_terminal,

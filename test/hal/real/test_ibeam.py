@@ -19,9 +19,12 @@ def _make_open_ibeam(
     readline_value: bytes | None = None,
     readline_side_effect: list[bytes] | None = None,
 ) -> tuple[ibeam_mod.IBeam, MagicMock]:
-    """Construct IBeam(port='COM4') and open() it against a mocked serial.Serial.
+    """Construct IBeam(port='COM4', max_power_uw=150000) and open() it against
+    a mocked serial.Serial.
 
-    Returns (ibeam, mock_ser). During open() the mock serial's readline returns
+    The µW ceiling is passed explicitly (the constructor arg is now the sole
+    source — there is no [iBeam] Max Power config key anymore). Returns
+    (ibeam, mock_ser). During open() the mock serial's readline returns
     the [OK] terminator so the echo-off handshake exits cleanly; the optional
     readline_side_effect is applied AFTER open() so it is available for the
     test's own _send_cmd / status calls (otherwise open()'s echo-off would
@@ -31,7 +34,7 @@ def _make_open_ibeam(
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b"[OK]\r\n"
-        ib = ibeam_mod.IBeam(port="COM4")
+        ib = ibeam_mod.IBeam(port="COM4", max_power_uw=150000)
         ib.open()
     # Now that open() is done, swap in the test-specific readline behaviour.
     if readline_side_effect is not None:
@@ -101,7 +104,7 @@ def test_ibeam_set_power_formats_micro_command() -> None:
 # --------------------------------------------------------------------------- #
 def test_ibeam_set_power_clamps_to_max_power() -> None:
     ib, mock_ser = _make_open_ibeam()
-    # Default max_power from config defaults is 150000 uW (150 mW, rig-confirmed).
+    # The max_power_uw ctor arg is 150000 uW (150 mW, rig-confirmed).
     assert ib.max_power == 150000
     ib.set_power(300000)
     text = _last_write_text(mock_ser)
@@ -497,7 +500,7 @@ def test_ibeam_analog_setup_command_sequence() -> None:
         mock_ser = MagicMock()
         MockSerial.return_value = mock_ser
         mock_ser.readline.return_value = b"[OK]\r\n"
-        ib = ibeam_mod.IBeam(port="COM4")
+        ib = ibeam_mod.IBeam(port="COM4", max_power_uw=150000)
         ib.open_for_analog_setup(ch2_power_uw=150000)
     writes = _write_sequence(mock_ser)
     decoded = [w.rstrip("\r\n") for w in writes]
@@ -538,7 +541,7 @@ def test_ibeam_analog_setup_aborts_on_rejection() -> None:
             b"%SYS-E-00025, parameter error\r\n",  # channel 2 power rejected
             b"[OK]\r\n",  # terminator
         ]
-        ib = ibeam_mod.IBeam(port="COM4")
+        ib = ibeam_mod.IBeam(port="COM4", max_power_uw=150000)
         ib.open_for_analog_setup(ch2_power_uw=150000)
     writes = _write_sequence(mock_ser)
     decoded = [w.rstrip("\r\n") for w in writes]
@@ -570,6 +573,9 @@ def test_ibeam_smart_laser_forwards_resolved_port() -> None:
         mock_engine.max_power = 150000
         adapter = ibeam_mod.IBeamSmartLaser(label="Laser 2 (647 nm)", port="COM9")
         assert MockIBeam.call_args.kwargs.get("port") == "COM9"
+        # The µW ceiling is forwarded too — None falls back to the
+        # standalone-serial 150000 µW (150 mW) diode hard limit.
+        assert MockIBeam.call_args.kwargs.get("max_power_uw") == 150000
         assert adapter._ibeam is mock_engine
 
 

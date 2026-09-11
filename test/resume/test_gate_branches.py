@@ -155,9 +155,9 @@ def test_from_manifest_loads_live_config_when_none(
     monkeypatch.setattr(
         gate_mod,
         "load_sections_from_ini",
-        lambda *a: {"iBeam": {"Max Power": "100000"}},
+        lambda *a: {"Lasers": {"Laser2 Max Power": "150"}},
     )
-    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
+    manifest = _manifest(safety_config={"Lasers": {"Laser2 Max Power": "150"}})
     findings = ResumeSafetyGate.from_manifest(manifest, None, None)
     assert findings.errors == []
     assert any("matches the live config" in c for c in findings.check_results)
@@ -173,7 +173,7 @@ def test_from_manifest_live_config_load_failure_warns(
         "load_sections_from_ini",
         lambda *a: (_ for _ in ()).throw(OSError("no config")),
     )
-    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
+    manifest = _manifest(safety_config={"Lasers": {"Laser2 Max Power": "150"}})
     findings = ResumeSafetyGate.from_manifest(manifest, None, None)
     assert findings.errors == []
     assert any("could not be loaded" in w for w in findings.warnings)
@@ -199,7 +199,7 @@ def test_empty_live_config_with_fingerprint_warns(
     """An empty live config (loaded but without sections) plus a recorded
     fingerprint reports 'could not be compared'."""
     _no_config_validation(monkeypatch)
-    manifest = _manifest(safety_config={"iBeam": {"Max Power": "100000"}})
+    manifest = _manifest(safety_config={"Lasers": {"Laser2 Max Power": "150"}})
     findings = ResumeSafetyGate.from_manifest(manifest, {}, _FakeMotors({}))
     assert findings.errors == []
     assert any("could not be compared" in w for w in findings.warnings)

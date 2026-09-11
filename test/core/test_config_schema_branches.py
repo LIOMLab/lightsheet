@@ -92,12 +92,11 @@ def test_load_sections_from_ini_reads_baseline(tmp_path: Path) -> None:
         "Channel = 1\n"
         "Wavelength = 647\n"
         "Power = 0.0\n"
-        "Max Power = 50000\n"
         "Status Poll Interval = 1000\n"
     )
     sections = load_sections_from_ini(str(ini), overlay_path=None)
     assert "iBeam" in sections
-    assert sections["iBeam"]["Max Power"] == "50000"
+    assert sections["iBeam"]["Status Poll Interval"] == "1000"
     assert sections["iBeam"]["Port"] == "COM4"
 
 
@@ -112,7 +111,6 @@ def test_load_sections_from_ini_merges_overlay(tmp_path: Path) -> None:
         "Channel = 1\n"
         "Wavelength = 647\n"
         "Power = 0.0\n"
-        "Max Power = 50000\n"
         "Status Poll Interval = 1000\n"
     )
     overlay = tmp_path / "overlay.ini"
@@ -123,11 +121,10 @@ def test_load_sections_from_ini_merges_overlay(tmp_path: Path) -> None:
         "Channel = 1\n"
         "Wavelength = 647\n"
         "Power = 0.0\n"
-        "Max Power = 80000\n"
-        "Status Poll Interval = 1000\n"
+        "Status Poll Interval = 2000\n"
     )
     sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
-    assert sections["iBeam"]["Max Power"] == "80000"
+    assert sections["iBeam"]["Status Poll Interval"] == "2000"
 
 
 def test_load_sections_from_ini_overlay_partial_does_not_clobber(
@@ -143,14 +140,13 @@ def test_load_sections_from_ini_overlay_partial_does_not_clobber(
         "Channel = 1\n"
         "Wavelength = 647\n"
         "Power = 0.0\n"
-        "Max Power = 50000\n"
         "Status Poll Interval = 1000\n"
     )
     overlay = tmp_path / "overlay.ini"
-    overlay.write_text("[iBeam]\nMax Power = 80000\n")
+    overlay.write_text("[iBeam]\nStatus Poll Interval = 2000\n")
     sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
-    # Max Power overridden from overlay.
-    assert sections["iBeam"]["Max Power"] == "80000"
+    # Status Poll Interval overridden from overlay.
+    assert sections["iBeam"]["Status Poll Interval"] == "2000"
     # Port NOT clobbered by overlay's empty sentinel.
     assert sections["iBeam"]["Port"] == "COM4"
 
@@ -171,7 +167,6 @@ def test_load_sections_from_ini_overlay_explicit_empty_propagates(
         "Channel = 1\n"
         "Wavelength = 647\n"
         "Power = 0.0\n"
-        "Max Power = 50000\n"
         "Status Poll Interval = 1000\n"
     )
     overlay = tmp_path / "overlay.ini"
@@ -181,8 +176,57 @@ def test_load_sections_from_ini_overlay_explicit_empty_propagates(
     sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
     # Port explicitly cleared by overlay.
     assert sections["iBeam"]["Port"] == ""
-    # Max Power NOT clobbered (absent from overlay, not explicitly empty).
-    assert sections["iBeam"]["Max Power"] == "50000"
+    # Status Poll Interval NOT clobbered (absent from overlay, not explicitly empty).
+    assert sections["iBeam"]["Status Poll Interval"] == "1000"
+
+
+def test_load_sections_from_ini_stale_ibeam_max_power_is_rejected(
+    tmp_path: Path,
+) -> None:
+    """A config.ini still carrying the retired ``[iBeam] Max Power`` key
+    fails startup validation on the real load path: the alias-template
+    read drops undeclared keys, so the loader surfaces the retired key
+    explicitly and the strict model's ``extra='forbid'`` rejects it —
+    fail-closed, never silently ignored."""
+    ini = tmp_path / "config.ini"
+    ini.write_text(
+        "[iBeam]\n"
+        "Port = COM4\n"
+        "Baud Rate = 115200\n"
+        "Channel = 1\n"
+        "Wavelength = 647\n"
+        "Power = 0.0\n"
+        "Max Power = 150000\n"
+        "Status Poll Interval = 1000\n"
+    )
+    sections = load_sections_from_ini(str(ini), overlay_path=None)
+    result = collect_config_errors({"iBeam": sections["iBeam"]})
+    assert any("Max Power" in e for e in result.errors), (
+        f"the retired Max Power key must produce a startup error, got "
+        f"{result.errors}"
+    )
+
+
+def test_load_sections_from_ini_stale_ibeam_max_power_in_overlay_rejected(
+    tmp_path: Path,
+) -> None:
+    """The same fail-closed rejection applies when the retired key is
+    carried by the rig-specific overlay file rather than the baseline."""
+    baseline = tmp_path / "config.ini"
+    baseline.write_text(
+        "[iBeam]\n"
+        "Port = COM4\n"
+        "Baud Rate = 115200\n"
+        "Channel = 1\n"
+        "Wavelength = 647\n"
+        "Power = 0.0\n"
+        "Status Poll Interval = 1000\n"
+    )
+    overlay = tmp_path / "overlay.ini"
+    overlay.write_text("[iBeam]\nMax Power = 150000\n")
+    sections = load_sections_from_ini(str(baseline), overlay_path=str(overlay))
+    result = collect_config_errors({"iBeam": sections["iBeam"]})
+    assert any("Max Power" in e for e in result.errors)
 
 
 # -- ConfigValidator.validate_or_abort + _show_dialog -----------------------
