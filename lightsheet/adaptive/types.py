@@ -61,10 +61,12 @@ class AdaptiveConfig:
     saturation_threshold: float = 0.95
     saturation_drop_factor: float = 0.7
     # Saturation percentile: the intensity percentile used for the hard
-    # saturation guard. Default 100 (max) catches any saturated pixel;
-    # a lower value (e.g. 99.999) trades noise immunity for catching
-    # smaller saturated blobs.
-    saturation_percentile: float = 100.0
+    # saturation guard. Default 99.99 matches the feedback statistic —
+    # a max-pixel (100) guard trips on a handful of hot pixels or a
+    # small specular feature while the bulk is still underexposed,
+    # which starves the loop before the target band is reachable.
+    # Lower values trade noise immunity for catching smaller blobs.
+    saturation_percentile: float = 99.99
     # Dead band: when |error| is below this fraction of the sensor max,
     # the PI loop makes no correction. Prevents hunting around the
     # target midpoint.

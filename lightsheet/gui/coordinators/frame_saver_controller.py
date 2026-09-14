@@ -652,9 +652,10 @@ class FrameSaver(QObject):
             return
         self.adaptive_trajectory.append(sample)
         logger.info(
-            "adaptive sample: plane=%d exposure=%.4fs power=(%.1f,%.1f) "
-            "cva=%s reacquired=%s fallback=%s",
+            "adaptive sample: plane=%d intensity=%s exposure=%.4fs "
+            "power=(%.1f,%.1f) cva=%s reacquired=%s fallback=%s",
             sample.plane_index,
+            [round(v, 3) for v in sample.intensity_fraction],
             sample.exposure_s,
             sample.laser_power_mw[0],
             sample.laser_power_mw[1],

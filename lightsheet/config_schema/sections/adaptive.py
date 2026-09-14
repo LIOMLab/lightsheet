@@ -33,7 +33,7 @@ class AdaptiveSettings(_NoEnvBaseSettings):
     intensity_percentile: float = Field(alias="Intensity Percentile", default=99.99)
     saturation_threshold: float = Field(alias="Saturation Threshold", default=0.95)
     saturation_drop_factor: float = Field(alias="Saturation Drop Factor", default=0.7)
-    saturation_percentile: float = Field(alias="Saturation Percentile", default=100.0)
+    saturation_percentile: float = Field(alias="Saturation Percentile", default=99.99)
     dead_band: float = Field(alias="Dead Band", default=0.02)
     max_step_fraction: float = Field(alias="Max Step Fraction", default=0.3)
 

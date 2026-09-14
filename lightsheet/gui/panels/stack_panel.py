@@ -718,7 +718,7 @@ class StackPanelWidget(QWidget):
             "Intensity Percentile": "99.99",
             "Saturation Threshold": "0.95",
             "Saturation Drop Factor": "0.7",
-            "Saturation Percentile": "100.0",
+            "Saturation Percentile": "99.99",
             "Dead Band": "0.02",
             "Max Step Fraction": "0.3",
         }
@@ -746,7 +746,7 @@ class StackPanelWidget(QWidget):
             intensity_pct = float(cfg.get("Intensity Percentile", "99.99"))
             saturation_threshold = float(cfg.get("Saturation Threshold", "0.95"))
             saturation_drop = float(cfg.get("Saturation Drop Factor", "0.7"))
-            saturation_pct = float(cfg.get("Saturation Percentile", "100.0"))
+            saturation_pct = float(cfg.get("Saturation Percentile", "99.99"))
             dead_band = float(cfg.get("Dead Band", "0.02"))
             max_step = float(cfg.get("Max Step Fraction", "0.3"))
         except (ValueError, TypeError):
