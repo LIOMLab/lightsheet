@@ -90,9 +90,37 @@ class _StackAdaptiveMixin:
         if shutter_mode == "Lightsheet":
             previous_line_time = getattr(self.camera, "line_time", None)
             previous_intent = self.camera.lightsheet_line_time
-            self.camera.lightsheet_line_time = _lightsheet_line_time_from_exposure(
+            line_time = _lightsheet_line_time_from_exposure(
                 cmd.exposure_s, self.camera.lightsheet_exposed_lines
             )
+            # Clamp to the camera's configured line-time ceiling. The SDK
+            # accepts out-of-range line times silently — an unclamped value
+            # beyond the sensor's usable range arms without error but
+            # returns zero frames, and because the intent attribute
+            # persists, every later arm_scan re-submits it and wedges the
+            # session. The adaptive bound spinboxes already cap entry at
+            # this ceiling; this clamp is the worker-side backstop for
+            # commands built from stale configs or resume manifests.
+            line_time_max_s = getattr(
+                self.camera, "lightsheet_line_time_max_s", None
+            )
+            if (
+                isinstance(line_time_max_s, (int, float))
+                and not isinstance(line_time_max_s, bool)
+                and math.isfinite(line_time_max_s)
+                and line_time_max_s > 0
+                and line_time > line_time_max_s
+            ):
+                logger.warning(
+                    "Adaptive exposure %.6g s implies line time %.6g s, "
+                    "above the camera ceiling %.6g s — clamped to the "
+                    "ceiling.",
+                    cmd.exposure_s,
+                    line_time,
+                    line_time_max_s,
+                )
+                line_time = line_time_max_s
+            self.camera.lightsheet_line_time = line_time
             try:
                 self.camera.set_lightsheet_mode()
             except Exception:

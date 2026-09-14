@@ -20,7 +20,12 @@ from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
 from lightsheet.hal.bundle import DeviceBundle
 from lightsheet.resume import ManifestUpdate, ResumeManifest
-from lightsheet.state.types import MicroscopeSnapshot, SaveMode, SaveOptions
+from lightsheet.state.types import (
+    AppliedMicroscopeSnapshot,
+    MicroscopeSnapshot,
+    SaveMode,
+    SaveOptions,
+)
 
 if TYPE_CHECKING:
     from lightsheet.adaptive.controller import AdaptiveController
@@ -277,6 +282,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # Set True only when the plane loop exhausts without a break —
         # drives the completed/interrupted manifest lifecycle at teardown.
         self._run_completed = False
+        # The lightsheet line-time intent that armed successfully at run
+        # start, captured in _run_setup and restored in _run_teardown when
+        # the run does not complete — an adaptive command must not leave a
+        # wedge-causing value on the camera for the next acquisition.
+        self._baseline_lightsheet_line_time_s: float | None = None
 
     def _last_controller_checkpoint(self, controller: str) -> dict[str, Any] | None:
         """Return the most recent manifest checkpoint for ``controller``.
@@ -460,6 +470,17 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
 
         # Setting the camera for scan acquisition
         self.camera.arm_scan()
+        # Capture the line-time intent that arm_scan just armed — the
+        # last-known-good value restored in teardown when the run does
+        # not complete.
+        baseline = getattr(self.camera, "lightsheet_line_time", None)
+        if (
+            isinstance(baseline, (int, float))
+            and not isinstance(baseline, bool)
+            and math.isfinite(baseline)
+            and baseline > 0
+        ):
+            self._baseline_lightsheet_line_time_s = float(baseline)
 
         # Arm the NI-DAQmx laser watchdog so a hung worker or a dead
         # process lets the DAQ write the safe off-voltage to the laser
@@ -1221,6 +1242,31 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         except Exception as e:
             logger.exception("Stack worker camera disarm cleanup failed")
             _cleanup_errors.append(f"camera disarm: {e}")
+        # Restore the run-start line-time intent when the run did not
+        # complete. The intent attribute is re-submitted by every later
+        # arm_scan — a value left behind by an aborted adaptive run (e.g.
+        # a camera timeout) would make the next single/stack acquisition
+        # fail the same way. The emitted snapshot resyncs the GUI model
+        # so the acquisition panel shows the restored value.
+        if not self._run_completed:
+            baseline = self._baseline_lightsheet_line_time_s
+            current = getattr(self.camera, "lightsheet_line_time", None)
+            if (
+                baseline is not None
+                and isinstance(current, (int, float))
+                and not isinstance(current, bool)
+                and not math.isclose(current, baseline, rel_tol=1e-9, abs_tol=1e-9)
+            ):
+                logger.info(
+                    "Stack worker teardown: restoring lightsheet line time "
+                    "%.6g s -> %.6g s",
+                    current,
+                    baseline,
+                )
+                self.camera.lightsheet_line_time = baseline
+                self.sig_applied_state.emit(
+                    AppliedMicroscopeSnapshot(lightsheet_line_time_s=baseline)
+                )
         if _cleanup_errors:
             self._shell.sig_message.emit(
                 "Stack acquisition failed — cleanup could not complete safely. "
