@@ -28,6 +28,7 @@ def _make_camera(shutter_mode: str = "Lightsheet") -> Camera:
     cam.shutter_mode = shutter_mode
     cam.exposure_time = 0.1  # 100 ms (stored in seconds)
     cam.line_time = 0.00780  # 7.8 ms per line (stored in seconds)
+    cam.ysize = 2048  # full sensor height — drives the rolling-readout frame period
     cam.lightsheet_exposed_lines = 25
     cam.lightsheet_delay_lines = 225
     cam.recorder_timeout_floor = 5
@@ -44,9 +45,11 @@ def _make_camera(shutter_mode: str = "Lightsheet") -> Camera:
 
 
 def test_compute_per_image_time_lightsheet() -> None:
-    """In Lightsheet mode the per-image time is line_time * exposed_lines."""
+    """In Lightsheet mode the per-image time is the full rolling-readout
+    frame period: line_time * ysize, matching the galvo_scan_time model in
+    siggen — not just the integration window (line_time * exposed_lines)."""
     cam = _make_camera(shutter_mode="Lightsheet")
-    assert cam._compute_per_image_time() == pytest.approx(0.00780 * 25)
+    assert cam._compute_per_image_time() == pytest.approx(0.00780 * 2048)
 
 
 def test_compute_per_image_time_rolling() -> None:
@@ -59,11 +62,11 @@ def test_timeout_formula_floor_applies() -> None:
     """Small acquisitions use the floor, not a too-short computed value.
     The legacy flat Recorder Timeout interval (rig-confirmed to work) is a
     hard floor the scaled value can never fall below:
-    max(5, 15, 100 * 0.0025 * 3.0) == max(5, 15, 0.75) == 15."""
+    max(5, 15, 100 * 0.02048 * 3.0) == max(5, 15, 6.144) == 15."""
     cam = _make_camera(shutter_mode="Lightsheet")
-    # Override per-image time to 2.5 ms for this scenario
-    cam.line_time = 0.0001
-    cam.lightsheet_exposed_lines = 25  # 0.0001 * 25 = 0.0025 s per image
+    # Keep the full-frame-period per-image time small for this scenario:
+    # 0.00001 * 2048 = 0.02048 s per image
+    cam.line_time = 0.00001
     per_image = cam._compute_per_image_time()
     timeout_s = max(
         cam.recorder_timeout_floor,

@@ -3,6 +3,7 @@ Created on February 8, 2022
 """
 
 import logging
+import math
 import time
 from datetime import datetime, timedelta
 
@@ -296,9 +297,27 @@ class Camera(ICamera):
         return None
 
     def _compute_per_image_time(self) -> float:
-        """Estimate per-image acquisition time (seconds), shutter-mode dependent."""
+        """Estimate per-image acquisition time (seconds), shutter-mode dependent.
+
+        Lightsheet mode returns the full rolling-readout frame period
+        (line_time * ysize) — the same model siggen uses for
+        galvo_scan_time — not just the integration window. When
+        line_time/ysize are not yet populated (pre-arm state or a
+        __new__-built test instance), the estimate falls back to the
+        exposed-lines product, then to exposure_time.
+        """
         if self.shutter_mode == "Lightsheet":
-            return self.line_time * self.lightsheet_exposed_lines  # ty: ignore[unsound-return-statement, unsupported-operator]
+            line_time = self.line_time
+            if (
+                isinstance(line_time, (int, float))
+                and math.isfinite(line_time)
+                and line_time > 0
+            ):
+                ysize = self.ysize
+                if isinstance(ysize, (int, float)) and ysize > 0:
+                    return float(line_time * ysize)
+                return float(line_time * self.lightsheet_exposed_lines)
+            return self.exposure_time
         else:  # Rolling or Global
             return self.exposure_time
 
