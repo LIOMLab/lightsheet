@@ -373,6 +373,129 @@ def test_power_step_capped_by_max_step_fraction() -> None:
     assert cmd.laser1_mw == pytest.approx(20.0 + 0.3 * 20.0, rel=1e-9)
 
 
+def test_sat_trip_power_ceiling_caps_reraise() -> None:
+    """After the guard trips at a power level, later raises are capped
+    halfway between the tripping and dropped levels — the loop
+    converges below the saturation boundary instead of bang-banging
+    across it (fallback +30% / guard -30% overshoot each other)."""
+    cfg = _cfg()
+    ctrl = AdaptiveController(cfg, n_planes=20, active_laser_idx=0)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # Trip the guard at 100 mW → power drops to 70, ceiling = 85.
+    cmd = ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=cfg.max_exposure_s,
+        current_powers_mw=(100.0, 0.0),
+        plane_idx=1,
+        saturation_intensity=1.0,
+    )
+    assert cmd.laser1_mw == pytest.approx(70.0)
+    # Next plane: bulk still dim at the exposure bound → fallback
+    # wants +30% (91 mW) but the learned ceiling caps at 85.
+    cmd = ctrl.update(
+        intensities=[0.10],
+        brighter_idx=0,
+        current_exposure_s=cfg.max_exposure_s,
+        current_powers_mw=(cmd.laser1_mw, cmd.laser2_mw),
+        plane_idx=2,
+    )
+    assert cmd.power_fallback is True
+    assert cmd.laser1_mw == pytest.approx(85.0, rel=1e-9)
+
+
+def test_sat_trip_exposure_ceiling_caps_reraise() -> None:
+    """When power is floored and the guard drops exposure, the learned
+    exposure ceiling caps later PI raises so the loop cannot re-cross
+    the level that saturated."""
+    cfg = _cfg()
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    # Trip at 50 ms with floored power → exposure drops to 35 ms,
+    # ceiling = 42.5 ms.
+    cmd = ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(0.0, 0.0),
+        plane_idx=1,
+        saturation_intensity=1.0,
+    )
+    assert cmd.exposure_s == pytest.approx(35e-3)
+    # Next plane still dim → PI wants to raise back past the trip
+    # point; the ceiling caps it at 42.5 ms.
+    cmd = ctrl.update(
+        intensities=[0.10],
+        brighter_idx=0,
+        current_exposure_s=cmd.exposure_s,
+        current_powers_mw=(0.0, 0.0),
+        plane_idx=2,
+    )
+    assert cmd.exposure_s == pytest.approx(42.5e-3, rel=1e-9)
+
+
+def test_sat_ceiling_relaxes_after_quiet_block() -> None:
+    """A saturating feature that leaves the field must not cap the run
+    forever: after block_size_n planes without a trip the ceiling
+    relaxes upward."""
+    cfg = _cfg(block_size_n=8)
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(0.0, 0.0),
+        plane_idx=1,
+        saturation_intensity=1.0,
+    )
+    assert ctrl._sat_exposure_ceiling_s == pytest.approx(42.5e-3)
+    # A quiet block of in-band planes relaxes the ceiling.
+    for p in range(2, 2 + cfg.block_size_n):
+        ctrl.update(
+            intensities=[0.925],
+            brighter_idx=0,
+            current_exposure_s=35e-3,
+            current_powers_mw=(0.0, 0.0),
+            plane_idx=p,
+            saturation_intensity=0.5,
+        )
+    assert ctrl._sat_exposure_ceiling_s > 42.5e-3
+
+
+def test_checkpoint_roundtrip_saturation_state() -> None:
+    """The learned saturation ceilings and quiet counter survive a
+    checkpoint/restore so a resumed run keeps the converged boundary."""
+    cfg = _cfg()
+    ctrl = AdaptiveController(cfg, n_planes=20)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(100.0, 0.0),
+        plane_idx=1,
+        saturation_intensity=1.0,
+    )
+    state = ctrl.checkpoint()
+    restored = AdaptiveController(cfg, 20, initial_state=state)
+    assert restored._sat_power_ceiling_mw == pytest.approx(85.0)
+    assert restored._sat_exposure_ceiling_s is None
+    assert restored._sat_quiet_planes == 0
+
+
+def test_restore_rejects_malformed_sat_ceiling() -> None:
+    """A non-finite or non-positive ceiling in a checkpoint is
+    rejected like every other state field."""
+    ctrl = AdaptiveController(_cfg(), n_planes=20)
+    with pytest.raises(ValueError):
+        ctrl.restore({"sat_power_ceiling_mw": float("nan")})
+    with pytest.raises(ValueError):
+        ctrl.restore({"sat_exposure_ceiling_s": -1.0})
+    with pytest.raises(ValueError):
+        ctrl.restore({"sat_quiet_planes": -2})
+
+
 # --------------------------------------------------------------------- #
 # D-02 brighter channel drives shared exposure; L2 only at block bounds
 # --------------------------------------------------------------------- #

@@ -137,6 +137,14 @@ class AdaptiveController:
         self._last_command: AdaptiveCommand | None = None
         self._pilot_indices: list[int] | None = None
         self._pilot_exposures: list[float] | None = None
+        # Learned saturation ceilings: the guard records the actuator
+        # level that tripped it so the normal loop converges below the
+        # boundary instead of bang-banging across it (a raise step and
+        # the guard drop each overshoot). Ceilings relax after a quiet
+        # block of planes so transient bright features recover.
+        self._sat_exposure_ceiling_s: float | None = None
+        self._sat_power_ceiling_mw: float | None = None
+        self._sat_quiet_planes = 0
         if initial_state is not None:
             self.restore(initial_state)
 
@@ -235,10 +243,30 @@ class AdaptiveController:
                 and active_idx < len(powers)
                 and powers[active_idx] > active_min + 1e-12
             ):
+                # Learn the boundary: halfway between the tripping
+                # level and the dropped level, so later raises converge
+                # below the true trip point instead of re-crossing it.
+                trip = powers[active_idx]
+                ceiling = trip * (1.0 + cfg.saturation_drop_factor) / 2.0
+                self._sat_power_ceiling_mw = (
+                    ceiling
+                    if self._sat_power_ceiling_mw is None
+                    else min(self._sat_power_ceiling_mw, ceiling)
+                )
                 powers[active_idx] = max(
-                    active_min, powers[active_idx] * cfg.saturation_drop_factor
+                    active_min, trip * cfg.saturation_drop_factor
                 )
                 new_exposure = current_exposure_s
+            else:
+                ceiling = current_exposure_s * (
+                    1.0 + cfg.saturation_drop_factor
+                ) / 2.0
+                self._sat_exposure_ceiling_s = (
+                    ceiling
+                    if self._sat_exposure_ceiling_s is None
+                    else min(self._sat_exposure_ceiling_s, ceiling)
+                )
+            self._sat_quiet_planes = 0
             clamped_exposure = cfg.clamp_exposure(new_exposure)
             new_l1, new_l2 = cfg.clamp_power((powers[0], powers[1]))
             # Build the command early and return — the PI residual and
@@ -292,8 +320,27 @@ class AdaptiveController:
             min(current_exposure_s + max_step, new_exposure),
         )
 
+        # A learned ceiling is only valid while the saturating feature
+        # is in view — once a quiet block of planes passes without a
+        # trip, relax it slowly so the loop re-probes the boundary as
+        # the stack moves through the sample.
+        self._sat_quiet_planes += 1
+        if self._sat_quiet_planes >= cfg.block_size_n:
+            if self._sat_exposure_ceiling_s is not None:
+                self._sat_exposure_ceiling_s = min(
+                    cfg.max_exposure_s, self._sat_exposure_ceiling_s * 1.05
+                )
+            if self._sat_power_ceiling_mw is not None:
+                self._sat_power_ceiling_mw = min(
+                    active_max, self._sat_power_ceiling_mw * 1.05
+                )
+
         # Clamp exposure first.
         clamped_exposure = cfg.clamp_exposure(new_exposure)
+        if self._sat_exposure_ceiling_s is not None:
+            clamped_exposure = min(
+                clamped_exposure, self._sat_exposure_ceiling_s
+            )
         # Power fallback when current exposure is at a bound and target
         # is still unmet — checks current_exposure_s (the physical limit),
         # not the newly computed value.
@@ -339,6 +386,15 @@ class AdaptiveController:
                 )
                 powers = list(current_powers_mw)
                 powers[active_idx] = active_current + power_delta_mw
+                # Cap raises at the learned saturation boundary so the
+                # loop converges instead of re-tripping the guard.
+                if (
+                    power_delta_mw > 0.0
+                    and self._sat_power_ceiling_mw is not None
+                ):
+                    powers[active_idx] = min(
+                        powers[active_idx], self._sat_power_ceiling_mw
+                    )
                 new_l1, new_l2 = powers[0], powers[1]
                 power_fallback = True
                 control_variable_active = "power"
@@ -488,6 +544,9 @@ class AdaptiveController:
             "reacquire_count": int(self._reacquire_count),
             "pilot": pilot,
             "last_command": last,
+            "sat_exposure_ceiling_s": self._sat_exposure_ceiling_s,
+            "sat_power_ceiling_mw": self._sat_power_ceiling_mw,
+            "sat_quiet_planes": int(self._sat_quiet_planes),
         }
 
     def restore(self, state: dict[str, Any]) -> None:
@@ -524,6 +583,36 @@ class AdaptiveController:
             raise ValueError(
                 f"reacquire_count must be a non-negative int; got {raw_reacquire_count}"
             )
+
+        for key in ("sat_exposure_ceiling_s", "sat_power_ceiling_mw"):
+            raw_ceiling = state.get(key)
+            if raw_ceiling is None:
+                continue
+            if (
+                not isinstance(raw_ceiling, (int, float))
+                or isinstance(raw_ceiling, bool)
+                or not math.isfinite(raw_ceiling)
+                or raw_ceiling <= 0
+            ):
+                raise ValueError(
+                    f"{key} must be a finite positive number or None; "
+                    f"got {raw_ceiling!r}"
+                )
+            if key == "sat_exposure_ceiling_s":
+                self._sat_exposure_ceiling_s = float(raw_ceiling)
+            else:
+                self._sat_power_ceiling_mw = float(raw_ceiling)
+
+        raw_quiet = state.get("sat_quiet_planes", 0)
+        if (
+            not isinstance(raw_quiet, int)
+            or isinstance(raw_quiet, bool)
+            or raw_quiet < 0
+        ):
+            raise ValueError(
+                f"sat_quiet_planes must be a non-negative int; got {raw_quiet}"
+            )
+        self._sat_quiet_planes = raw_quiet
 
         pilot = state.get("pilot")
         if pilot is not None:
@@ -601,7 +690,7 @@ class AdaptiveController:
                     )
 
             cva = last["control_variable_active"]
-            if cva not in ("fixed", "exposure", "power"):
+            if cva not in ("fixed", "exposure", "power", "saturation_guard"):
                 raise ValueError(
                     f"last_command.control_variable_active must be one of "
                     f"('fixed', 'exposure', 'power'); got {cva!r}"
