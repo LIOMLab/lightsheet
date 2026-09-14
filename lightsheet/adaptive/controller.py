@@ -161,9 +161,10 @@ class AdaptiveController:
 
         When disabled, returns a constant fixed command. When enabled:
         feedforward baseline from pilot trajectory, PI residual
-        correction, exposure-primary clamping with power fallback at
-        bounds, cross-channel balance (brighter drives exposure,
-        dimmer trims power), and re-acquire on sharp deviation.
+        correction, direction-aware actuator priority (bright → power
+        first then exposure; dim → exposure first then power),
+        cross-channel balance (brighter drives exposure, dimmer trims
+        power), and re-acquire on sharp deviation.
         """
         cfg = self._cfg
 
@@ -186,13 +187,39 @@ class AdaptiveController:
         if isinstance(brighter_intensity, float) and math.isnan(brighter_intensity):
             brighter_intensity = 0.0
         error = brighter_intensity - cfg.target_midpoint
+        n_channels = len(intensities)
+
+        # Direction-aware actuator priority (single channel): reducing
+        # intensity leads with laser power — it keeps the fast frame
+        # rate and cuts photodose — and exposure only joins once power
+        # is at its floor. Increasing intensity keeps the established
+        # exposure-primary ordering with power as the bound fallback.
+        active_idx = self._active_laser_idx
+        active_min = (
+            cfg.min_power_mw[active_idx]
+            if active_idx < len(cfg.min_power_mw)
+            else 0.0
+        )
+        active_max = (
+            cfg.max_power_mw[active_idx]
+            if active_idx < len(cfg.max_power_mw)
+            else cfg.max_power_mw[0]
+        )
+        active_current = (
+            current_powers_mw[active_idx]
+            if active_idx < len(current_powers_mw)
+            else current_powers_mw[0]
+        )
 
         # Hard saturation guard: a small saturated blob can saturate the
         # sensor even when the percentile statistic is below the target.
         # The saturation_intensity is computed at a higher percentile
         # (default max) so a single saturated pixel trips the guard.
-        # Drop the exposure immediately and skip the PI update so the
-        # loop does not fight the guard.
+        # Single-channel drops the active laser's power first (the
+        # bright-direction priority); multi-channel still drops the
+        # shared exposure because one channel's power cannot protect
+        # the other's frame. Skip the PI update so the loop does not
+        # fight the guard.
         sat_intensity = (
             saturation_intensity
             if saturation_intensity is not None
@@ -201,29 +228,50 @@ class AdaptiveController:
         if isinstance(sat_intensity, float) and math.isnan(sat_intensity):
             sat_intensity = 0.0
         if sat_intensity > cfg.saturation_threshold:
+            powers = list(current_powers_mw)
             new_exposure = current_exposure_s * cfg.saturation_drop_factor
+            if (
+                n_channels <= 1
+                and active_idx < len(powers)
+                and powers[active_idx] > active_min + 1e-12
+            ):
+                powers[active_idx] = max(
+                    active_min, powers[active_idx] * cfg.saturation_drop_factor
+                )
+                new_exposure = current_exposure_s
             clamped_exposure = cfg.clamp_exposure(new_exposure)
-            power_fallback = False
-            control_variable_active = "saturation_guard"
+            new_l1, new_l2 = cfg.clamp_power((powers[0], powers[1]))
             # Build the command early and return — the PI residual and
             # power-fallback paths are skipped so the guard is not
             # overridden by the normal loop.
             cmd = AdaptiveCommand(
                 exposure_s=clamped_exposure,
-                laser1_mw=current_powers_mw[0],
-                laser2_mw=current_powers_mw[1],
+                laser1_mw=new_l1,
+                laser2_mw=new_l2,
                 reacquire=False,
-                control_variable_active=control_variable_active,
-                power_fallback=power_fallback,
+                control_variable_active="saturation_guard",
+                power_fallback=False,
                 reacquire_exhausted=False,
             )
             self._last_command = cmd
             return cmd
 
-        # Dead band: when |error| is below the dead band, make no
-        # correction — the PI loop is already at the target. This
-        # prevents hunting around the target midpoint.
-        if abs(error) < cfg.dead_band:
+        # Too bright and power still reducible: power leads the
+        # correction, exposure holds, and the PI integral is frozen —
+        # integrating an error the exposure loop is not acting on
+        # would wind up and slam the exposure the moment power floors.
+        power_primary = (
+            n_channels <= 1
+            and error > cfg.dead_band
+            and active_current > active_min + 1e-12
+        )
+
+        if power_primary:
+            new_exposure = current_exposure_s
+        elif abs(error) < cfg.dead_band:
+            # Dead band: when |error| is below the dead band, make no
+            # correction — the PI loop is already at the target. This
+            # prevents hunting around the target midpoint.
             delta, self._integral = 0.0, self._integral
             scaled_delta = 0.0
             new_exposure = ff_exposure - self._integral
@@ -265,30 +313,35 @@ class AdaptiveController:
         # Per-laser power trim: L1 trims per-plane on power fallback;
         # L2 trims only at block boundaries.
         is_block_boundary = ((plane_idx + 1) % cfg.block_size_n) == 0
-        n_channels = len(intensities)
 
         if n_channels <= 1:
-            # Single-channel: on power fallback trim the ACTIVE laser's
-            # slot — not always L1. A single-channel intensity list
-            # carries no channel identity, so the energized laser index
-            # comes from the constructor; the inactive slot is passed
-            # through unchanged.
-            active_idx = self._active_laser_idx
-            if power_fallback:
-                active_max = (
-                    cfg.max_power_mw[active_idx]
-                    if active_idx < len(cfg.max_power_mw)
-                    else cfg.max_power_mw[0]
-                )
-                active_current = (
-                    current_powers_mw[active_idx]
-                    if active_idx < len(current_powers_mw)
-                    else current_powers_mw[0]
-                )
+            # Single-channel: trim the ACTIVE laser's slot — not always
+            # L1. A single-channel intensity list carries no channel
+            # identity, so the energized laser index comes from the
+            # constructor; the inactive slot is passed through
+            # unchanged. Power moves on the bright-direction
+            # power-primary step OR on the bound fallback — the delta
+            # law is the same, and the sign of error picks the
+            # direction.
+            if power_primary or power_fallback:
                 power_delta_mw = -error * active_max * 0.5
+                # Per-step power slew — the same max_step_fraction the
+                # exposure path applies. Uncapped power steps (a large
+                # error can request tens of mW) made consecutive
+                # slices flash; the cap bounds the per-plane
+                # brightness change. The floor (10% of max) keeps the
+                # loop moving when current power is near zero.
+                step_cap = cfg.max_step_fraction * max(
+                    active_current, active_min, 0.1 * active_max
+                )
+                power_delta_mw = max(
+                    -step_cap, min(step_cap, power_delta_mw)
+                )
                 powers = list(current_powers_mw)
                 powers[active_idx] = active_current + power_delta_mw
                 new_l1, new_l2 = powers[0], powers[1]
+                power_fallback = True
+                control_variable_active = "power"
             else:
                 new_l1, new_l2 = current_powers_mw
         else:
