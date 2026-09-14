@@ -84,11 +84,16 @@ class _StackAdaptiveMixin:
         # invalidates the DAQ waveforms (they embed the per-line timing),
         # so compute_scan_waveforms is re-run before the plane is acquired
         # — but only on an actual change, so an unchanged command does not
-        # allocate a second waveform buffer.
+        # allocate a second waveform buffer. An unchanged line-time
+        # request goes further and issues no camera SDK traffic at all:
+        # per-plane armed-state set_cmos_line_timing/exposure-delay writes
+        # interleaved with recorder create/delete cycles are the suspected
+        # trigger of the rig's native access violation (plane ~1209/1911),
+        # and the SDK's whole-nanosecond register quantization makes a
+        # within-tolerance write provably identical to the armed value.
         shutter_mode = getattr(self.camera, "shutter_mode", "Rolling")
         applied_line_time_s: float | None = None
         if shutter_mode == "Lightsheet":
-            previous_line_time = getattr(self.camera, "line_time", None)
             previous_intent = self.camera.lightsheet_line_time
             line_time = _lightsheet_line_time_from_exposure(
                 cmd.exposure_s, self.camera.lightsheet_exposed_lines
@@ -120,29 +125,54 @@ class _StackAdaptiveMixin:
                     line_time_max_s,
                 )
                 line_time = line_time_max_s
-            self.camera.lightsheet_line_time = line_time
-            try:
-                self.camera.set_lightsheet_mode()
-            except Exception:
-                # A rejected set_lightsheet_mode must not leave the
-                # refused candidate assigned to lightsheet_line_time —
-                # every later arm_scan re-submits that attribute and
-                # would wedge the session on the same firmware rejection.
-                # Restore the pre-assignment intent, then re-raise so the
-                # run still aborts loudly.
-                self.camera.lightsheet_line_time = previous_intent
-                raise
-            applied_line_time_s = self.camera.line_time
-            if applied_line_time_s is not None and (
-                previous_line_time is None
-                or not math.isclose(
-                    previous_line_time,
-                    applied_line_time_s,
-                    rel_tol=1e-9,
-                    abs_tol=1e-9,
+            # No-change short-circuit: when the request lands within
+            # ~10 ns of the armed intent, the register write would be
+            # identical anyway — the pco SDK truncates
+            # set_cmos_line_timing to whole nanoseconds
+            # (int(line_time * 1e9)) and set_lightsheet_mode syncs the
+            # intent attribute to the quantized readback, so an intent
+            # within tolerance means the camera is already armed with
+            # this value. Skip the intent assignment, the
+            # set_lightsheet_mode call, and the changed-check entirely;
+            # the applied snapshot takes the still-applied readback so
+            # its shape is unchanged. On a run with a constant
+            # feedforward exposure this turns ~one reconfigure per plane
+            # into zero.
+            if (
+                isinstance(previous_intent, (int, float))
+                and not isinstance(previous_intent, bool)
+                and math.isfinite(previous_intent)
+                and previous_intent > 0
+                and math.isclose(
+                    line_time, previous_intent, rel_tol=1e-9, abs_tol=1e-8
                 )
             ):
-                self.siggen.compute_scan_waveforms()
+                applied_line_time_s = self.camera.line_time
+            else:
+                previous_line_time = getattr(self.camera, "line_time", None)
+                self.camera.lightsheet_line_time = line_time
+                try:
+                    self.camera.set_lightsheet_mode()
+                except Exception:
+                    # A rejected set_lightsheet_mode must not leave the
+                    # refused candidate assigned to lightsheet_line_time —
+                    # every later arm_scan re-submits that attribute and
+                    # would wedge the session on the same firmware
+                    # rejection. Restore the pre-assignment intent, then
+                    # re-raise so the run still aborts loudly.
+                    self.camera.lightsheet_line_time = previous_intent
+                    raise
+                applied_line_time_s = self.camera.line_time
+                if applied_line_time_s is not None and (
+                    previous_line_time is None
+                    or not math.isclose(
+                        previous_line_time,
+                        applied_line_time_s,
+                        rel_tol=1e-9,
+                        abs_tol=1e-9,
+                    )
+                ):
+                    self.siggen.compute_scan_waveforms()
         else:
             self.camera.set_exposure_time(max(1, int(cmd.exposure_s * 1000)))
         # Write laser powers through the safe HAL paths. The percent is
