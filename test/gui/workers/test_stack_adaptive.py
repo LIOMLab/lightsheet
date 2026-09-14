@@ -117,3 +117,122 @@ def test_apply_adaptive_command_clamps_readback_and_preserves_intent(
 
     assert len(captured) == 1
     assert captured[0].laser_power_pct == (100.0, 40.0)
+
+
+def test_apply_adaptive_command_clamps_line_time_to_camera_ceiling(
+    qtbot: QtBot,
+) -> None:
+    """An adaptive command whose implied line time exceeds the camera's
+    configured ceiling is clamped before it reaches the camera — an
+    out-of-range line time arms silently but returns zero frames and
+    wedges every later acquisition on the persisted intent."""
+    from test.helpers.factories import make_bundle
+
+    bundle = make_bundle()
+    shell = Mock()
+    shell.lasers = bundle.lasers
+    shell.lasers[0].max_power = 0.0
+    shell.lasers[1].max_power = 0.0
+    shell.saving_allowed = False
+    shell._fs = Mock()
+    shell.sig_message = Mock()
+
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,
+        save_description="adaptive clamp",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+    )
+    worker.camera.shutter_mode = "Lightsheet"
+    worker.camera.lightsheet_exposed_lines = 16
+    # 50 ms total / 16 lines = 3.125 ms per line — above the mock's
+    # 500 µs ceiling.
+    assert worker.camera.lightsheet_line_time_max_s == pytest.approx(500e-6)
+
+    cmd = AdaptiveCommand.fixed(
+        exposure_s=0.05,
+        laser1_mw=0.0,
+        laser2_mw=0.0,
+    )
+    worker._apply_adaptive_command(cmd)
+
+    assert worker.camera.lightsheet_line_time == pytest.approx(500e-6)
+    # The applied readback takes the clamped value too.
+    assert worker.camera.line_time == pytest.approx(500e-6)
+
+
+def test_run_teardown_restores_baseline_line_time_on_abort(
+    qtbot: QtBot,
+) -> None:
+    """When a run does not complete, teardown restores the line-time
+    intent armed at run start — a wedge-causing adaptive value must not
+    leak into the next single/stack acquisition. The GUI model resyncs
+    via sig_applied_state."""
+    from lightsheet.state.types import AppliedMicroscopeSnapshot
+    from test.helpers.factories import make_bundle
+
+    bundle = make_bundle()
+    shell = Mock()
+    shell.lasers = bundle.lasers
+    shell.saving_allowed = False
+    shell.sig_message = Mock()
+
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,
+        save_description="teardown restore",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+    )
+    # Simulate: armed at the 48.8 µs baseline, adaptive pushed the intent
+    # to an elevated value, then the run aborted.
+    worker._baseline_lightsheet_line_time_s = 48.8e-6
+    worker.camera.lightsheet_line_time = 1.5e-3
+    worker._run_completed = False
+    captured: list[AppliedMicroscopeSnapshot] = []
+    worker.sig_applied_state.connect(captured.append)
+
+    worker._run_teardown(None)
+
+    assert worker.camera.lightsheet_line_time == pytest.approx(48.8e-6)
+    assert len(captured) == 1
+    assert captured[0].lightsheet_line_time_s == pytest.approx(48.8e-6)
+
+
+def test_run_teardown_keeps_applied_line_time_on_completed_run(
+    qtbot: QtBot,
+) -> None:
+    """A completed run keeps the last-applied line time — the restore
+    is only for aborts, where the value may be wedge-causing."""
+    from test.helpers.factories import make_bundle
+
+    bundle = make_bundle()
+    shell = Mock()
+    shell.lasers = bundle.lasers
+    shell.saving_allowed = False
+    shell.sig_message = Mock()
+
+    worker = StackWorker(
+        bundle,
+        Mock(),
+        shell,
+        save_description="teardown keep",
+        save_stitch_blend=False,
+        save_all_crop=False,
+        save_all_full=False,
+        multi_channel=False,
+    )
+    worker._baseline_lightsheet_line_time_s = 48.8e-6
+    worker.camera.lightsheet_line_time = 200e-6
+    worker._run_completed = True
+
+    worker._run_teardown(None)
+
+    assert worker.camera.lightsheet_line_time == pytest.approx(200e-6)

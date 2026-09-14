@@ -255,17 +255,20 @@ def test_adaptive_rolling_shutter_shows_ms(
     QApplication.processEvents()
     suffix = ui.doubleSpinBox_adaptiveMinExposure.suffix().strip().lower()
     assert suffix == "ms"
+    assert ui.label_adaptiveMinExposure.text() == "Min Exposure:"
+    assert ui.label_adaptiveMaxExposure.text() == "Max Exposure:"
     hint = ui.label_adaptiveShutterModeHint.text().lower()
     assert "rolling" in hint
-    assert "millisecond" in hint
+    assert "ms" in hint
 
 
-def test_adaptive_lightsheet_shutter_shows_ms(
+def test_adaptive_lightsheet_shutter_shows_us_line_time(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
     """In Lightsheet shutter mode the exposure bound spinboxes show the
-    ms suffix (the bound is the integrated camera exposure, not the
-    per-line time) and the hint reads the Lightsheet copy."""
+    µs suffix and Min/Max Line Time labels — the bound is the per-line
+    time, matching the acquisition panel's Line Time field — and the
+    hint reads the Lightsheet copy."""
     ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
@@ -275,19 +278,47 @@ def test_adaptive_lightsheet_shutter_shows_ms(
     from PySide6.QtWidgets import QApplication
 
     QApplication.processEvents()
-    suffix = ui.doubleSpinBox_adaptiveMinExposure.suffix().strip().lower()
-    assert suffix == "ms"
+    suffix = ui.doubleSpinBox_adaptiveMinExposure.suffix().strip()
+    assert suffix == "µs"
+    assert ui.label_adaptiveMinExposure.text() == "Min Line Time:"
+    assert ui.label_adaptiveMaxExposure.text() == "Max Line Time:"
     hint = ui.label_adaptiveShutterModeHint.text().lower()
     assert "lightsheet" in hint
+    assert "line time" in hint
 
 
-def test_adaptive_lightsheet_bound_converts_ms_to_seconds(
+def test_adaptive_lightsheet_bound_max_is_camera_line_time_ceiling(
     qtbot: QtBot, controller: Controller_MainWindow
 ) -> None:
-    """In Lightsheet shutter mode the exposure bound is the integrated
-    camera exposure in ms and converts to seconds as ms x 1e-3 — the
-    worker divides by ``lightsheet_exposed_lines`` to recover the
-    per-line time. Set Min Exposure = 2500 ms → 2.5 s."""
+    """In Lightsheet mode the bound spinbox maximum is the camera's
+    configured line-time ceiling (mock camera: 500 µs) — an adaptive
+    bound can never exceed a line time the camera can run."""
+    ctrl = controller
+    ui = _adaptive_ui(ctrl)
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
+    ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.currentTextChanged.emit(
+        "Lightsheet"
+    )
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    cam = ctrl._bundle.camera
+    expected_us = cam.lightsheet_line_time_max_s * 1e6
+    assert ui.doubleSpinBox_adaptiveMinExposure.maximum() == pytest.approx(
+        expected_us
+    )
+    assert ui.doubleSpinBox_adaptiveMaxExposure.maximum() == pytest.approx(
+        expected_us
+    )
+
+
+def test_adaptive_lightsheet_bound_converts_us_to_seconds(
+    qtbot: QtBot, controller: Controller_MainWindow
+) -> None:
+    """In Lightsheet shutter mode the bound is the per-line time in µs
+    and converts to the worker's total-integration-seconds contract via
+    µs x 1e-6 x lightsheet_exposed_lines (mock camera: 16 lines).
+    Set Min Line Time = 250 µs → 250e-6 x 16 = 4e-3 s."""
     ctrl = controller
     ui = _adaptive_ui(ctrl)
     ctrl.acquisition_panel.ui.comboBox_cameraShutterMode.setCurrentText("Lightsheet")
@@ -295,13 +326,12 @@ def test_adaptive_lightsheet_bound_converts_ms_to_seconds(
         "Lightsheet"
     )
     ui.checkBox_adaptiveEnable.setChecked(True)
-    ui.doubleSpinBox_adaptiveMaxExposure.setValue(5000.0)  # 5000 ms
-    ui.doubleSpinBox_adaptiveMaxExposure.editingFinished.emit()
-    ui.doubleSpinBox_adaptiveMinExposure.setValue(2500.0)  # 2500 ms
+    ui.doubleSpinBox_adaptiveMinExposure.setValue(250.0)  # 250 µs per line
     ui.doubleSpinBox_adaptiveMinExposure.editingFinished.emit()
     cfg = ctrl.stack_panel.build_adaptive_config()
     assert cfg is not None
-    assert cfg.min_exposure_s == pytest.approx(2500e-3, rel=1e-9)
+    exposed_lines = ctrl._bundle.camera.lightsheet_exposed_lines
+    assert cfg.min_exposure_s == pytest.approx(250e-6 * exposed_lines, rel=1e-9)
 
 
 def test_adaptive_rolling_bound_converts_ms_to_seconds(

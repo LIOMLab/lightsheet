@@ -83,6 +83,11 @@ def _make_worker(qtbot: QtBot, shutter_mode: str = "Lightsheet") -> StackWorker:
 
     worker = StackWorker(bundle, Mock(), shell, multi_channel=False)
     worker.camera.shutter_mode = shutter_mode
+    # These tests exercise the exposure→line-time conversion with
+    # multi-ms line times; raise the mock camera's line-time ceiling so
+    # the adaptive clamp does not engage (it is covered separately in
+    # test_stack_adaptive.py).
+    worker.camera.lightsheet_line_time_max_s = 10e-3
     return worker
 
 
