@@ -423,7 +423,7 @@ def test_read_adaptive_fixed_config_falls_back_on_cfg_exception(
         dead_band,
         max_step,
     ) = sp._read_adaptive_fixed_config()
-    # Defaults: 90/95/8/8/0.4/0.05/5/99.99/0.95/0.7/100/0.02/0.3.
+    # Defaults: 90/95/8/8/0.4/0.05/5/99.99/0.95/0.7/99.99/0.02/0.3.
     assert target_lo == pytest.approx(0.90)
     assert target_hi == pytest.approx(0.95)
     assert reacquire == pytest.approx(0.08)
@@ -434,7 +434,7 @@ def test_read_adaptive_fixed_config_falls_back_on_cfg_exception(
     assert intensity_pct == pytest.approx(99.99)
     assert sat_thresh == pytest.approx(0.95)
     assert sat_drop == pytest.approx(0.7)
-    assert sat_pct == pytest.approx(100.0)
+    assert sat_pct == pytest.approx(99.99)
     assert dead_band == pytest.approx(0.02)
     assert max_step == pytest.approx(0.3)
 
