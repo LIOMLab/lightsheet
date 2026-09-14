@@ -119,9 +119,18 @@ class AdaptiveController:
         cfg: AdaptiveConfig,
         n_planes: int,
         initial_state: dict[str, Any] | None = None,
+        active_laser_idx: int = 0,
     ) -> None:
         self._cfg = cfg
         self._n_planes = n_planes
+        # In single-channel mode ``intensities`` has length 1 and cannot
+        # identify which physical laser is energized — the worker passes
+        # the auto-selected channel index here so the power fallback
+        # trims the right ``(laser1_mw, laser2_mw)`` slot. Defaults to 0
+        # for back-compat with callers that predate the parameter.
+        self._active_laser_idx = (
+            active_laser_idx if 0 <= active_laser_idx <= 1 else 0
+        )
         self._integral = 0.0
         self._pilot_traj: Callable[[int], float] | None = None
         self._reacquire_count = 0
@@ -259,13 +268,29 @@ class AdaptiveController:
         n_channels = len(intensities)
 
         if n_channels <= 1:
-            # Single-channel: trim L1 power only on power fallback.
+            # Single-channel: on power fallback trim the ACTIVE laser's
+            # slot — not always L1. A single-channel intensity list
+            # carries no channel identity, so the energized laser index
+            # comes from the constructor; the inactive slot is passed
+            # through unchanged.
+            active_idx = self._active_laser_idx
             if power_fallback:
-                power_delta_mw = -error * cfg.max_power_mw[0] * 0.5
-                new_l1 = current_powers_mw[0] + power_delta_mw
+                active_max = (
+                    cfg.max_power_mw[active_idx]
+                    if active_idx < len(cfg.max_power_mw)
+                    else cfg.max_power_mw[0]
+                )
+                active_current = (
+                    current_powers_mw[active_idx]
+                    if active_idx < len(current_powers_mw)
+                    else current_powers_mw[0]
+                )
+                power_delta_mw = -error * active_max * 0.5
+                powers = list(current_powers_mw)
+                powers[active_idx] = active_current + power_delta_mw
+                new_l1, new_l2 = powers[0], powers[1]
             else:
-                new_l1 = current_powers_mw[0]
-            new_l2 = current_powers_mw[1]
+                new_l1, new_l2 = current_powers_mw
         else:
             # Multi-channel: the BRIGHTER channel drives the shared
             # exposure, so on power fallback its power is the one to

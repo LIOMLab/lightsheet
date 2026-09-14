@@ -287,6 +287,27 @@ def test_power_clamped_to_max() -> None:
     assert cmd.laser2_mw <= cfg.max_power_mw[1] + 1e-9
 
 
+def test_single_channel_power_fallback_trims_active_laser() -> None:
+    """Single-channel regression: when L2 is the energized channel
+    (``active_laser_idx=1``), the power fallback must raise
+    ``laser2_mw`` — not laser1 — while the inactive slot passes through
+    unchanged. A single-element intensity list carries no channel
+    identity, so the worker supplies the index at construction."""
+    cfg = _cfg()
+    ctrl = AdaptiveController(cfg, n_planes=20, active_laser_idx=1)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.10],  # well below target
+        brighter_idx=0,
+        current_exposure_s=cfg.max_exposure_s,  # at the bound → fallback
+        current_powers_mw=(0.0, 45.0),
+        plane_idx=1,
+    )
+    assert cmd.power_fallback is True
+    assert cmd.laser2_mw > 45.0  # the energized channel ramps up
+    assert cmd.laser1_mw == pytest.approx(0.0)  # inactive slot untouched
+
+
 # --------------------------------------------------------------------- #
 # D-02 brighter channel drives shared exposure; L2 only at block bounds
 # --------------------------------------------------------------------- #

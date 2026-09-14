@@ -552,7 +552,21 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
             initial_state = self._last_controller_checkpoint("adaptive")
 
             self._adaptive_controller = AdaptiveController(
-                self._adaptive_cfg, n_planes, initial_state=initial_state
+                self._adaptive_cfg,
+                n_planes,
+                initial_state=initial_state,
+                # Single-channel runs measure one frame per plane — the
+                # intensity list carries no channel identity, so the
+                # controller needs the auto-selected laser index to put
+                # the power-fallback delta on the right slot.
+                active_laser_idx=(
+                    1
+                    if (
+                        not self._snapshot.auto_lasers[0]
+                        and self._snapshot.auto_lasers[1]
+                    )
+                    else 0
+                ),
             )
 
             # Effective exposure in seconds: in Lightsheet mode the
