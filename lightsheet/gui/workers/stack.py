@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.gui.workers.stack_adaptive import _StackAdaptiveMixin
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.hal.real.laser_watchdog import ARM_FAILURE_MESSAGE
 from lightsheet.resume import ManifestUpdate, ResumeManifest
 from lightsheet.state.types import (
     AppliedMicroscopeSnapshot,
@@ -487,6 +488,11 @@ class StackWorker(QObject, _AcquireScanMixin, _StackAdaptiveMixin):
         # AO channels. Armed before the lasers are energized.
         if watchdog is not None:
             watchdog.arm()
+            # arm() never raises — a device that rejects the expiration
+            # config leaves armed False with only a log WARNING. Surface
+            # it so the operator knows crash protection is absent.
+            if not watchdog.armed:
+                self._shell.sig_message.emit(ARM_FAILURE_MESSAGE)
 
         # Pre-stop guard: a Stop or E-stop pressed in the instant between
         # thread start and this line skips energizing the lasers entirely.

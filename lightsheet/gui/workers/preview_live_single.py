@@ -15,6 +15,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from lightsheet.gui.workers.scan_mixin import _AcquireScanMixin
 from lightsheet.hal.bundle import DeviceBundle
+from lightsheet.hal.real.laser_watchdog import ARM_FAILURE_MESSAGE
 from lightsheet.state.types import MicroscopeSnapshot, SaveMode, SaveOptions
 
 if TYPE_CHECKING:
@@ -163,6 +164,12 @@ class PreviewWorker(QObject):
             # AO channels. Armed before the lasers are energized.
             if watchdog is not None:
                 watchdog.arm()
+                # arm() never raises — a device that rejects the
+                # expiration config leaves armed False with only a log
+                # WARNING. Surface it so the operator knows crash
+                # protection is absent.
+                if not watchdog.armed:
+                    self._shell.sig_message.emit(ARM_FAILURE_MESSAGE)
 
             self._hw.start_lasers(self._snapshot, energize_lasers=energize_lasers)
 
@@ -331,6 +338,12 @@ class LiveWorker(QObject, _AcquireScanMixin):
             # AO channels. Armed before the lasers are energized.
             if watchdog is not None:
                 watchdog.arm()
+                # arm() never raises — a device that rejects the
+                # expiration config leaves armed False with only a log
+                # WARNING. Surface it so the operator knows crash
+                # protection is absent.
+                if not watchdog.armed:
+                    self._shell.sig_message.emit(ARM_FAILURE_MESSAGE)
 
             self._hw.start_lasers(self._snapshot, energize_lasers=energize_lasers)
 
@@ -548,6 +561,12 @@ class SingleWorker(QObject, _AcquireScanMixin):
             # AO channels. Armed before the lasers are energized.
             if watchdog is not None:
                 watchdog.arm()
+                # arm() never raises — a device that rejects the
+                # expiration config leaves armed False with only a log
+                # WARNING. Surface it so the operator knows crash
+                # protection is absent.
+                if not watchdog.armed:
+                    self._shell.sig_message.emit(ARM_FAILURE_MESSAGE)
 
             if self._multi_channel:
                 # Multi-channel per-channel cycle: energize L1 -> acquire

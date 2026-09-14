@@ -34,6 +34,15 @@ except Exception:  # pragma: no cover - exercised on the dev machine
     _nidaqmx_types = None
 
 
+# Operator-facing message emitted by workers when arm() leaves the
+# watchdog unarmed. arm() never raises, so without this signal a failed
+# arm is only a log WARNING — invisible while a Class IIIB laser runs.
+ARM_FAILURE_MESSAGE = (
+    "Laser crash-watchdog could not arm — lasers will NOT switch off "
+    "automatically if the app crashes."
+)
+
+
 class LaserWatchdog:
     """Hardware watchdog that drives laser AO channels to their safe
     off-voltage when the acquisition worker stops resetting it.
@@ -55,6 +64,17 @@ class LaserWatchdog:
         self._timeout_s = timeout_s
         self._watchdogs: list[Any] = []
         self._lock = threading.Lock()
+
+    @property
+    def armed(self) -> bool:
+        """True while at least one DAQ WatchdogTask is held.
+
+        Workers check this right after ``arm()`` — arm() never raises, so
+        a device that rejects the expiration-state config would otherwise
+        fail silently and leave the lasers without crash protection.
+        """
+        with self._lock:
+            return bool(self._watchdogs)
 
     def arm(self) -> None:
         """Create and start one WatchdogTask per DAQ device.
@@ -88,7 +108,11 @@ class LaserWatchdog:
                     wt = _nidaqmx_watchdog.WatchdogTask(device, timeout=self._timeout_s)
                     states = [
                         _nidaqmx_types.AOExpirationState(
-                            physical_channel=term,
+                            # Canonical channel form ("Dev7/ao0") — the
+                            # leading slash in the configured terminal is
+                            # terminal-route syntax; stricter DAQmx parsers
+                            # reject it as a channel name.
+                            physical_channel=str(term).removeprefix("/"),
                             expiration_state=volts,
                             output_type=_nidaqmx_constants.WatchdogAOExpirState.VOLTAGE,
                         )
