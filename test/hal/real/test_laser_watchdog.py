@@ -88,6 +88,137 @@ def test_arm_groups_channels_by_device(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(created[0].states) == 2
 
 
+def test_armed_property_tracks_watchdog_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``armed`` is False before arm(), True once a WatchdogTask is held,
+    and False again after disarm(). Workers read it right after arm() to
+    decide whether crash protection is actually in place."""
+    created = []
+
+    class MockWatchdogTask:
+        def __init__(self, device: str, timeout: float = 10) -> None:
+            created.append(device)
+
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def reset_timer(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_watchdog",
+        SimpleNamespace(WatchdogTask=MockWatchdogTask),
+    )
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_constants",
+        SimpleNamespace(WatchdogAOExpirState=SimpleNamespace(VOLTAGE=1)),
+    )
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_types",
+        SimpleNamespace(AOExpirationState=lambda **kw: kw),
+    )
+
+    watchdog = LaserWatchdog([_FakeLaser("/Dev7/ao0", 0.0)])
+    assert watchdog.armed is False
+    watchdog.arm()
+    assert created == ["Dev7"]
+    assert watchdog.armed is True
+    watchdog.disarm()
+    assert watchdog.armed is False
+
+
+def test_armed_stays_false_when_arm_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A device that rejects the expiration-state config leaves
+    ``armed`` False — the operator-facing warning depends on it."""
+
+    class FailingWatchdogTask:
+        def __init__(self, device: str, timeout: float = 10) -> None:
+            pass
+
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
+            raise RuntimeError(
+                "Physical channel specified does not exist on this device."
+            )
+
+        def start(self) -> None:
+            pass
+
+        def reset_timer(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_watchdog",
+        SimpleNamespace(WatchdogTask=FailingWatchdogTask),
+    )
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_constants",
+        SimpleNamespace(WatchdogAOExpirState=SimpleNamespace(VOLTAGE=1)),
+    )
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_types",
+        SimpleNamespace(AOExpirationState=lambda **kw: kw),
+    )
+
+    watchdog = LaserWatchdog([_FakeLaser("/Dev7/ao0", 0.0)])
+    watchdog.arm()  # must not raise
+    assert watchdog.armed is False
+
+
+def test_arm_passes_canonical_channel_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The AOExpirationState physical_channel uses the canonical
+    ``Dev7/ao0`` form — a leading slash is terminal-route syntax, not a
+    channel name, and stricter DAQmx parsers reject it."""
+    captured: list[object] = []
+
+    class MockWatchdogTask:
+        def __init__(self, device: str, timeout: float = 10) -> None:
+            pass
+
+        def cfg_watchdog_ao_expir_states(self, states: list[object]) -> None:
+            captured.extend(states)
+
+        def start(self) -> None:
+            pass
+
+        def reset_timer(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_watchdog",
+        SimpleNamespace(WatchdogTask=MockWatchdogTask),
+    )
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_constants",
+        SimpleNamespace(WatchdogAOExpirState=SimpleNamespace(VOLTAGE=1)),
+    )
+    monkeypatch.setattr(
+        "lightsheet.hal.real.laser_watchdog._nidaqmx_types",
+        SimpleNamespace(AOExpirationState=lambda **kw: kw),
+    )
+
+    watchdog = LaserWatchdog([_FakeLaser("/Dev7/ao0", 0.0)])
+    watchdog.arm()
+    assert len(captured) == 1
+    assert captured[0]["physical_channel"] == "Dev7/ao0"
+
+
 def test_arm_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     """Calling arm() twice does not create a second WatchdogTask."""
     created = []

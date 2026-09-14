@@ -210,6 +210,48 @@ def test_preview_worker_stop_lasers_on_exception_exit(qtbot: QtBot) -> None:
     hw.stop_lasers.assert_called_once()
 
 
+class _UnarmedWatchdog:
+    """Stub watchdog whose arm() always yields zero armed tasks — the
+    state LaserWatchdog lands in when the DAQ rejects the expiration-state
+    config (e.g. channel unsupported on the device)."""
+
+    def __init__(self) -> None:
+        self.arm_calls = 0
+        self.disarm_calls = 0
+
+    @property
+    def armed(self) -> bool:
+        return False
+
+    def arm(self) -> None:
+        self.arm_calls += 1
+
+    def reset(self) -> None:
+        pass
+
+    def disarm(self) -> None:
+        self.disarm_calls += 1
+
+
+def test_preview_worker_warns_when_watchdog_arm_fails(qtbot: QtBot) -> None:
+    """When watchdog.arm() leaves the watchdog unarmed, the worker must
+    tell the operator that crash protection is absent — the failure was
+    historically only a log WARNING, so a Class IIIB laser ran all night
+    with no expiry path."""
+    shell = _PreviewShell()
+    stub = _UnarmedWatchdog()
+    shell._laser_watchdog = stub  # ty: ignore[attr-defined]
+    worker, _hw = _make_worker(shell)
+
+    worker.run()
+
+    assert stub.arm_calls == 1
+    messages = [c.args[0] for c in shell.sig_message.emit.call_args_list]
+    assert any("crash-watchdog could not arm" in m for m in messages), (
+        f"expected the crash-watchdog warning in sig_message, got {messages}"
+    )
+
+
 def test_preview_worker_never_accesses_ui_widgets(qtbot: QtBot) -> None:
     """PreviewWorker.run must NOT access any self._shell.ui.* widget. The
     exposure-time spinbox read happens in PreviewWorker.__init__ on the
