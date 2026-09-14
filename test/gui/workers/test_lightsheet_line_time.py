@@ -147,21 +147,78 @@ def test_lightsheet_apply_order_and_changed_only_recompute(qtbot: QtBot) -> None
     assert emitted[-1].lightsheet_line_time_s == pytest.approx(0.005)
 
 
-def test_unchanged_line_time_does_not_recompute_waveforms(qtbot: QtBot) -> None:
-    """When the applied line time is already the requested value, the
-    Lightsheet mode is still applied but no second waveform buffer is
-    allocated."""
+def test_unchanged_line_time_skips_camera_reconfigure(qtbot: QtBot) -> None:
+    """An adaptive command whose implied line time already matches the
+    armed intent issues zero camera SDK traffic: no set_lightsheet_mode
+    call, no lightsheet_line_time intent rewrite, no waveform recompute.
+    The applied snapshot still carries the applied readback."""
     worker = _make_worker(qtbot)
     worker.camera.lightsheet_exposed_lines = 16
     worker.camera.lightsheet_line_time = 0.005
     worker.camera.line_time = 0.005
     calls = _ordered_calls(worker)
 
+    emitted: list[Any] = []
+    worker.sig_applied_state.connect(emitted.append)
+
     cmd = AdaptiveCommand.fixed(exposure_s=0.080, laser1_mw=0.0, laser2_mw=0.0)
     worker._apply_adaptive_command(cmd)
     worker.acquire_scan()
 
-    assert calls == ["set_lightsheet_mode", "acquire_scan"]
+    assert calls == ["acquire_scan"]
+    assert worker.camera.lightsheet_line_time == pytest.approx(0.005)
+    assert emitted[-1].lightsheet_line_time_s == pytest.approx(0.005)
+
+
+def test_second_identical_command_skips_set_lightsheet_mode(qtbot: QtBot) -> None:
+    """A changed command applies once; the identical command on the next
+    plane must not reconfigure the camera again — set_lightsheet_mode
+    fires exactly once across both applies, and the second apply still
+    emits the applied-state snapshot."""
+    worker = _make_worker(qtbot)
+    worker.camera.lightsheet_exposed_lines = 16
+    worker.camera.lightsheet_line_time = 0.001
+    worker.camera.line_time = 0.001
+    calls = _ordered_calls(worker)
+
+    emitted: list[Any] = []
+    worker.sig_applied_state.connect(emitted.append)
+
+    cmd = AdaptiveCommand.fixed(exposure_s=0.080, laser1_mw=0.0, laser2_mw=0.0)
+    worker._apply_adaptive_command(cmd)
+    worker._apply_adaptive_command(cmd)
+
+    assert calls == ["set_lightsheet_mode", "compute_scan_waveforms"]
+    assert len(emitted) == 2
+    assert emitted[-1].lightsheet_line_time_s == pytest.approx(0.005)
+
+
+def test_changed_command_reapplies(qtbot: QtBot) -> None:
+    """The no-change guard must not wedge subsequent real changes: after
+    a first apply, a command with a materially different exposure fires
+    set_lightsheet_mode again and — because the applied value changed —
+    recomputes the DAQ waveforms."""
+    worker = _make_worker(qtbot)
+    worker.camera.lightsheet_exposed_lines = 16
+    worker.camera.lightsheet_line_time = 0.001
+    worker.camera.line_time = 0.001
+    calls = _ordered_calls(worker)
+
+    worker._apply_adaptive_command(
+        AdaptiveCommand.fixed(exposure_s=0.080, laser1_mw=0.0, laser2_mw=0.0)
+    )
+    worker._apply_adaptive_command(
+        AdaptiveCommand.fixed(exposure_s=0.096, laser1_mw=0.0, laser2_mw=0.0)
+    )
+
+    assert calls == [
+        "set_lightsheet_mode",
+        "compute_scan_waveforms",
+        "set_lightsheet_mode",
+        "compute_scan_waveforms",
+    ]
+    assert worker.camera.line_time == pytest.approx(0.006)
+    assert worker.camera.lightsheet_line_time == pytest.approx(0.006)
 
 
 def test_set_lightsheet_mode_failure_restores_line_time(qtbot: QtBot) -> None:
@@ -182,7 +239,10 @@ def test_set_lightsheet_mode_failure_restores_line_time(qtbot: QtBot) -> None:
 
     worker.camera.set_lightsheet_mode = _reject  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
 
-    cmd = AdaptiveCommand.fixed(exposure_s=0.080, laser1_mw=0.0, laser2_mw=0.0)
+    # Request a line time that differs from the armed intent — an
+    # unchanged request short-circuits before reaching the rejecting
+    # call, so only a real change exercises the restore-on-reject path.
+    cmd = AdaptiveCommand.fixed(exposure_s=0.096, laser1_mw=0.0, laser2_mw=0.0)
     with pytest.raises(_FirmwareRejection):
         worker._apply_adaptive_command(cmd)
 
