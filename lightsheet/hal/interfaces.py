@@ -35,6 +35,9 @@ class ICameraCore(ABC):
     shutter_mode: str
     line_time: float | None
     lightsheet_line_time: float
+    # Upper bound (seconds) on the per-line time the adaptive path may
+    # command — sourced from [Camera] "Lightsheet Line Time Max" (µs).
+    lightsheet_line_time_max_s: float
     lightsheet_exposed_lines: int
     lightsheet_delay_lines: int
     recorder_timeout_status: bool

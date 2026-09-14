@@ -63,6 +63,9 @@ class MockCamera(ICamera):
         self.shutter_mode = "Rolling"
         self.exposure_time = 100.0 * 1e-3  # 100 ms, stored in seconds
         self.lightsheet_line_time = 48.80 * 1e-6  # 48.8 us, stored in seconds
+        # Line-time ceiling mirrors the real Camera's [Camera] config
+        # default ("Lightsheet Line Time Max" = 500 µs).
+        self.lightsheet_line_time_max_s = 500.0 * 1e-6
         self.lightsheet_exposed_lines = 16
         self.lightsheet_delay_lines = 0
         self.recorder_timeout_interval = 5

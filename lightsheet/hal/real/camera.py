@@ -26,6 +26,15 @@ class Camera(ICamera):
     _cfg_defaults["Shutter Mode"] = "Rolling"
     _cfg_defaults["Exposure Time"] = "100"
     _cfg_defaults["Lightsheet Line Time"] = "48.80"
+    # Hard ceiling on the per-line time any code path may command in
+    # Lightsheet mode (microseconds). The SDK accepts out-of-range line
+    # times silently — a line time beyond the sensor's usable range arms
+    # without error but returns zero frames and, because the value
+    # persists on this object, wedges every later acquisition. The
+    # default matches the acquisition panel's line-time range and stays
+    # below the documented PCO sCMOS line-time maxima; raise it only
+    # after validating the value produces frames on the rig.
+    _cfg_defaults["Lightsheet Line Time Max"] = "500.0"
     _cfg_defaults["Lightsheet Exposed Lines"] = "16"
     _cfg_defaults["Lightsheet Delay Lines"] = "0"
     _cfg_defaults["Recorder Timeout"] = "5"
@@ -71,6 +80,9 @@ class Camera(ICamera):
         self.shutter_mode = str(self._cfg["Shutter Mode"])
         self.exposure_time = float(self._cfg["Exposure Time"]) * 1e-3
         self.lightsheet_line_time = float(self._cfg["Lightsheet Line Time"]) * 1e-6
+        self.lightsheet_line_time_max_s = (
+            float(self._cfg["Lightsheet Line Time Max"]) * 1e-6
+        )
         self.lightsheet_exposed_lines = int(self._cfg["Lightsheet Exposed Lines"])
         self.lightsheet_delay_lines = int(self._cfg["Lightsheet Delay Lines"])
         self.recorder_timeout_interval = int(self._cfg["Recorder Timeout"])
@@ -85,6 +97,9 @@ class Camera(ICamera):
         self._cfg["Shutter Mode"] = str(self.shutter_mode)
         self._cfg["Exposure Time"] = str(self.exposure_time * 1e3)
         self._cfg["Lightsheet Line Time"] = str(self.lightsheet_line_time * 1e6)
+        self._cfg["Lightsheet Line Time Max"] = str(
+            self.lightsheet_line_time_max_s * 1e6
+        )
         self._cfg["Lightsheet Exposed Lines"] = str(self.lightsheet_exposed_lines)
         self._cfg["Lightsheet Delay Lines"] = str(self.lightsheet_delay_lines)
         self._cfg["Recorder Timeout"] = str(self.recorder_timeout_interval)
