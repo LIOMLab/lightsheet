@@ -308,6 +308,71 @@ def test_single_channel_power_fallback_trims_active_laser() -> None:
     assert cmd.laser1_mw == pytest.approx(0.0)  # inactive slot untouched
 
 
+def test_bright_single_channel_reduces_power_holds_exposure() -> None:
+    """Direction-aware priority: when the single-channel frame is above
+    the band and power is still reducible, power leads the correction —
+    the active laser drops, exposure holds, and the PI integral is
+    frozen so it cannot wind up and slam the exposure later."""
+    cfg = _cfg()
+    ctrl = AdaptiveController(cfg, n_planes=20, active_laser_idx=0)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.98],  # above the 0.95 band — needs reduction
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(60.0, 45.0),
+        plane_idx=1,
+        saturation_intensity=0.5,  # below the guard — normal path
+    )
+    # error = 0.98 - 0.925 = 0.055 → delta = -0.055 * 100 * 0.5 = -2.75
+    assert cmd.laser1_mw == pytest.approx(60.0 - 2.75, rel=1e-9)
+    assert cmd.laser2_mw == pytest.approx(45.0)  # inactive slot held
+    assert cmd.exposure_s == pytest.approx(50e-3)  # held while power acts
+    assert cmd.control_variable_active == "power"
+    assert cmd.power_fallback is True
+    # Integral was not integrated while power led the correction.
+    assert ctrl._integral == pytest.approx(0.0)
+
+
+def test_bright_power_floored_falls_back_to_exposure() -> None:
+    """When the active laser is already at its power floor and the
+    frame is still too bright, exposure takes over the reduction —
+    power first, then exposure."""
+    cfg = _cfg(min_power_mw=(45.0, 45.0))
+    ctrl = AdaptiveController(cfg, n_planes=20, active_laser_idx=1)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.98],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(60.0, 45.0),  # L2 at its 45 mW floor
+        plane_idx=1,
+        saturation_intensity=0.5,
+    )
+    # Power floored → PI exposure path runs → exposure drops.
+    assert cmd.exposure_s < 50e-3
+    assert cmd.laser2_mw == pytest.approx(45.0)
+    assert cmd.laser1_mw == pytest.approx(60.0)
+
+
+def test_power_step_capped_by_max_step_fraction() -> None:
+    """The per-plane power step is capped at max_step_fraction of the
+    current power — an uncapped step from a large error made
+    consecutive slices flash."""
+    cfg = _cfg(max_step_fraction=0.3)
+    ctrl = AdaptiveController(cfg, n_planes=20, active_laser_idx=0)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.0],  # extreme dim → raw delta +46 mW
+        brighter_idx=0,
+        current_exposure_s=cfg.max_exposure_s,  # bound → power fallback
+        current_powers_mw=(20.0, 0.0),
+        plane_idx=1,
+    )
+    # Raw request +46.25 mW is capped at 0.3 * 20 = 6 mW.
+    assert cmd.laser1_mw == pytest.approx(20.0 + 0.3 * 20.0, rel=1e-9)
+
+
 # --------------------------------------------------------------------- #
 # D-02 brighter channel drives shared exposure; L2 only at block bounds
 # --------------------------------------------------------------------- #
@@ -564,11 +629,12 @@ def test_saturation_guard_drops_exposure() -> None:
     ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
     # The PI percentile (p99.99) is below the target — a small saturated
     # blob does not move the p99.99 but trips the max-based guard.
+    # Powers are at the floor so the guard must cut exposure.
     cmd = ctrl.update(
         intensities=[0.50],  # p99.99 is below target — PI would raise exposure
         brighter_idx=0,
         current_exposure_s=50e-3,
-        current_powers_mw=(20.0, 0.0),
+        current_powers_mw=(0.0, 0.0),
         plane_idx=0,
         saturation_intensity=1.0,  # max pixel is saturated
     )
@@ -576,6 +642,33 @@ def test_saturation_guard_drops_exposure() -> None:
     assert cmd.exposure_s == pytest.approx(50e-3 * 0.7, rel=1e-9)
     assert cmd.control_variable_active == "saturation_guard"
     assert cmd.power_fallback is False
+
+
+def test_saturation_guard_drops_power_first_single_channel() -> None:
+    """Bright-direction priority applies to the guard too: with
+    reducible power the guard drops the ACTIVE laser by
+    saturation_drop_factor and holds the exposure — power is the
+    cheaper reduction actuator. The inactive slot passes through."""
+    cfg = _cfg(
+        saturation_threshold=0.95,
+        saturation_drop_factor=0.7,
+        saturation_percentile=100.0,
+        min_power_mw=(10.0, 0.0),
+    )
+    ctrl = AdaptiveController(cfg, n_planes=20, active_laser_idx=0)
+    ctrl.prime([0, 5, 10, 15, 19], [50e-3] * 5)
+    cmd = ctrl.update(
+        intensities=[0.50],
+        brighter_idx=0,
+        current_exposure_s=50e-3,
+        current_powers_mw=(20.0, 45.0),
+        plane_idx=0,
+        saturation_intensity=1.0,
+    )
+    assert cmd.control_variable_active == "saturation_guard"
+    assert cmd.laser1_mw == pytest.approx(20.0 * 0.7, rel=1e-9)
+    assert cmd.laser2_mw == pytest.approx(45.0)  # inactive slot held
+    assert cmd.exposure_s == pytest.approx(50e-3)  # exposure held
 
 
 def test_saturation_guard_uses_saturation_percentile() -> None:
@@ -593,7 +686,7 @@ def test_saturation_guard_uses_saturation_percentile() -> None:
         intensities=[0.50],
         brighter_idx=0,
         current_exposure_s=50e-3,
-        current_powers_mw=(20.0, 0.0),
+        current_powers_mw=(0.0, 0.0),  # power floored → exposure drop
         plane_idx=0,
         saturation_intensity=0.96,  # max pixel at 96% — trips the 0.95 guard
     )
