@@ -10,6 +10,7 @@ StackWorker constructor — the worker thread never reads ``ui.*``.
 
 from __future__ import annotations
 
+import math
 import typing
 from typing import ClassVar
 
@@ -23,7 +24,7 @@ from lightsheet.gui.panels.acquisition_table_manager import AcquisitionTableMana
 from lightsheet.gui.panels.ui_stack_panel import Ui_StackPanel
 from lightsheet.gui.styles import spacing as _s
 from lightsheet.gui.styles import typography as _t
-from lightsheet.gui.widgets.field_spec import FIELD_SPECS
+from lightsheet.gui.widgets.field_spec import FIELD_SPECS, FieldSpec
 
 if typing.TYPE_CHECKING:
     from lightsheet.gui.shell.controller import Controller_MainWindow
@@ -38,9 +39,23 @@ _ADAPTIVE_BOUND_INVALID_MSG = (
     "Adjust the bounds or uncheck Adaptive Control."
 )
 
-# The shutter-mode hint copy.
-_HINT_ROLLING = "Rolling shutter — exposure bound in milliseconds."
-_HINT_LIGHTSHEET = "Lightsheet shutter — exposure bound in microseconds (line time)."
+# The shutter-mode hint copy. The exposure-bound fields mirror the
+# acquisition panel's live camera-timing control: Exposure Time (ms) in
+# Rolling/Global, Line Time (µs per line) in Lightsheet.
+_HINT_ROLLING = (
+    "Rolling shutter — bounds are total exposure in ms "
+    "(same as Acquisition → Exposure Time)."
+)
+_HINT_LIGHTSHEET = (
+    "Lightsheet shutter — bounds are per-line time in µs "
+    "(same as Acquisition → Line Time)."
+)
+
+# Fallback line-time bounds (µs) for the Lightsheet adaptive exposure
+# spinboxes when the bundle camera is unavailable (test shells). The
+# live values come from the camera's configured ceiling.
+_ADAPTIVE_LINE_TIME_MIN_US = 10.0
+_ADAPTIVE_LINE_TIME_MAX_US = 500.0
 
 
 class StackPanelWidget(QWidget):
@@ -479,8 +494,13 @@ class StackPanelWidget(QWidget):
         spinboxes. The schema already rejected out-of-range values at
         startup, so the loaded values are safe. A missing [Adaptive]
         section leaves the spinboxes at their FieldSpec defaults. The
-        power keys are percent of each laser's max power ("* Power Pct")
-        — the percent→mW conversion happens in ``build_adaptive_config``."""
+        "Min/Max Exposure" keys are interpreted in the active shutter
+        mode's unit — total exposure ms in Rolling/Global, per-line µs
+        in Lightsheet (set by ``_update_adaptive_shutter_units``, which
+        runs after this load and clamps the widgets into the mode's
+        range). The power keys are percent of each laser's max power
+        ("* Power Pct") — the percent→mW conversion happens in
+        ``build_adaptive_config``."""
         from lightsheet.config import cfg_read
 
         defaults = {
@@ -571,28 +591,94 @@ class StackPanelWidget(QWidget):
         self._adaptive_prior_values[name] = sb.value()  # ty: ignore[unresolved-attribute]
         self._adaptive_latched = False
 
-    def _update_adaptive_shutter_units(self) -> None:
-        """The exposure bound is always the camera exposure time in ms
-        (the total per-plane integration time), regardless of shutter
-        mode. Keep the spinbox suffix as ms in both Rolling and
-        Lightsheet modes so the operator sees the same unit."""
-        acq_ui = getattr(self._shell, "acquisition_panel", None)
-        acq_ui = getattr(acq_ui, "ui", None) if acq_ui is not None else None
-        if acq_ui is None:
-            return
-        mode = ""
+    def _camera_shutter_mode(self) -> str:
+        """Return the acquisition panel's selected camera shutter mode
+        ("" when the panel or combo is unavailable)."""
+        acq_ui = getattr(
+            getattr(self._shell, "acquisition_panel", None), "ui", None
+        )
         combo = getattr(acq_ui, "comboBox_cameraShutterMode", None)
-        if combo is not None:
-            mode = str(combo.currentText()).strip()
+        return str(combo.currentText()).strip() if combo is not None else ""
+
+    def _camera_line_time_max_us(self) -> float:
+        """The camera's configured line-time ceiling in µs — the adaptive
+        bound spinbox maximum in Lightsheet mode, so an adaptive bound can
+        never exceed a line time the camera can run. Falls back to
+        ``_ADAPTIVE_LINE_TIME_MAX_US`` when the bundle camera is
+        unavailable."""
+        cam = getattr(getattr(self._shell, "_bundle", None), "camera", None)
+        v = getattr(cam, "lightsheet_line_time_max_s", None)
+        if (
+            isinstance(v, (int, float))
+            and not isinstance(v, bool)
+            and math.isfinite(v)
+            and v > 0
+        ):
+            return float(v) * 1e6
+        return _ADAPTIVE_LINE_TIME_MAX_US
+
+    def _lightsheet_exposed_lines(self) -> float:
+        """The exposed-line count used for the µs→s bound conversion —
+        the live camera attribute the worker will divide by. Falls back
+        to the acquisition panel spinbox, then 1.0 (a deliberately dim,
+        safe result) when neither source is readable."""
+        cam = getattr(getattr(self._shell, "_bundle", None), "camera", None)
+        n = getattr(cam, "lightsheet_exposed_lines", None)
+        if isinstance(n, (int, float)) and not isinstance(n, bool) and n > 0:
+            return float(n)
+        acq_ui = getattr(
+            getattr(self._shell, "acquisition_panel", None), "ui", None
+        )
+        sb = getattr(acq_ui, "doubleSpinBox_cameraExposedLines", None)
+        if sb is not None and sb.value() > 0:
+            return float(sb.value())
+        return 1.0
+
+    def _update_adaptive_shutter_units(self) -> None:
+        """Swap the adaptive exposure-bound fields to match the
+        acquisition panel's live camera-timing control for the selected
+        shutter mode.
+
+        Rolling/Global: the live control is "Exposure Time" in ms — the
+        bounds stay the total per-plane exposure in ms (FieldSpec
+        defaults). Lightsheet: the live control is "Line Time" in µs —
+        the bounds become per-line time in µs with the acquisition Line
+        Time box's step/decimals and the camera's configured line-time
+        ceiling as the widget maximum. The bound VALUES are not
+        converted on a mode switch — the same config.ini keys are
+        interpreted in the active mode's unit.
+        """
+        mode = self._camera_shutter_mode()
+        if mode == "Lightsheet":
+            line_time_spec = FIELD_SPECS["doubleSpinBox_cameraLineTime"]
+            spec = FieldSpec(
+                "µs",
+                line_time_spec.decimals,
+                line_time_spec.single_step,
+                line_time_spec.page_step,
+                _ADAPTIVE_LINE_TIME_MIN_US,
+                self._camera_line_time_max_us(),
+            )
+            min_label, max_label = "Min Line Time:", "Max Line Time:"
+            hint = _HINT_LIGHTSHEET
+        else:
+            min_label, max_label = "Min Exposure:", "Max Exposure:"
+            hint = _HINT_ROLLING
+            spec = None
         for name in self._ADAPTIVE_EXPOSURE_SPINBOXES:
             sb = getattr(self.ui, name, None)
-            if sb is not None:
-                sb.setSuffix(" ms")
-                sb.setDecimals(0)
-        if mode == "Lightsheet":
-            self.ui.label_adaptiveShutterModeHint.setText(_HINT_LIGHTSHEET)
-        else:
-            self.ui.label_adaptiveShutterModeHint.setText(_HINT_ROLLING)
+            if sb is None:
+                continue
+            spec_for_sb = spec if spec is not None else FIELD_SPECS[name]
+            if hasattr(sb, "applySpec"):
+                sb.applySpec(spec_for_sb)
+            else:
+                sb.setSuffix(f" {spec_for_sb.unit}")
+                sb.setDecimals(spec_for_sb.decimals)
+                sb.setRange(spec_for_sb.minimum, spec_for_sb.maximum)
+        self.ui.label_adaptiveMinExposure.setText(min_label)
+        self.ui.label_adaptiveMaxExposure.setText(max_label)
+        self.ui.label_adaptiveShutterModeHint.setText(hint)
 
     def _read_adaptive_fixed_config(
         self,
@@ -736,15 +822,24 @@ class StackPanelWidget(QWidget):
         if self._adaptive_latched:
             return None
 
-        # The exposure bound is always the camera exposure time in ms —
-        # the total per-plane integration time. The worker contract for
-        # ``AdaptiveConfig.exposure_s`` is seconds, so convert ms → s.
-        # In Lightsheet mode the worker divides by
-        # ``lightsheet_exposed_lines`` to recover the per-line time; the
-        # bound here is the integrated exposure, not the line time.
+        # The exposure-bound fields mirror the acquisition panel's live
+        # camera-timing control (see _update_adaptive_shutter_units):
+        # Rolling/Global holds total exposure in ms (→ s via x1e-3);
+        # Lightsheet holds per-line time in µs — the same quantity the
+        # acquisition Line Time box edits — and the worker contract is
+        # total per-plane integration seconds, so convert
+        # µs x 1e-6 x lightsheet_exposed_lines (the worker divides by the
+        # same exposed-line count to recover the per-line time).
+        lightsheet = self._camera_shutter_mode() == "Lightsheet"
+        exposed_lines = (
+            self._lightsheet_exposed_lines() if lightsheet else 1.0
+        )
+
         def _exposure_to_seconds(sb_name: str) -> float:
             sb = getattr(self.ui, sb_name)
             v = float(sb.value())
+            if lightsheet:
+                return v * 1e-6 * exposed_lines
             return v * 1e-3
 
         min_exp_s = _exposure_to_seconds("doubleSpinBox_adaptiveMinExposure")

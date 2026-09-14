@@ -100,8 +100,9 @@ FIELD_SPECS: dict[str, FieldSpec] = {
     "doubleSpinBox_laserOneAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     "doubleSpinBox_laserTwoAmplitude": FieldSpec("%", 1, 1.0, 10.0, 0.0, 100.0),
     # Stack panel — adaptive config group (13 enumerated spinboxes). The
-    # exposure bound unit is shutter-mode-dependent (ms in Rolling / lines
-    # in Lightsheet) and swapped at runtime. The power bounds are percent
+    # exposure bound unit is shutter-mode-dependent (ms in Rolling /
+    # per-line µs in Lightsheet) and swapped at runtime — the specs below
+    # are the Rolling-mode defaults applied before the swap. The power bounds are percent
     # of each laser's own max power (0-100, same convention as the Lasers
     # panel amplitude spinboxes); the percent→mW conversion happens in
     # build_adaptive_config via the live bundle laser maxima.
@@ -152,8 +153,12 @@ FIELD_PURPOSES: dict[str, str] = {
     "doubleSpinBox_laserOneAmplitude": "Laser 1 power",
     "doubleSpinBox_laserTwoAmplitude": "Laser 2 power",
     # Stack panel — adaptive config group
-    "doubleSpinBox_adaptiveMinExposure": "Adaptive min exposure bound",
-    "doubleSpinBox_adaptiveMaxExposure": "Adaptive max exposure bound",
+    "doubleSpinBox_adaptiveMinExposure": (
+        "Adaptive min exposure bound (ms in Rolling; per-line µs in Lightsheet)"
+    ),
+    "doubleSpinBox_adaptiveMaxExposure": (
+        "Adaptive max exposure bound (ms in Rolling; per-line µs in Lightsheet)"
+    ),
     "doubleSpinBox_adaptiveLaser1MinPower": (
         "Adaptive laser 1 min power bound (% of max power)"
     ),
