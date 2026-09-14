@@ -3,13 +3,15 @@ Unit tests for src/camera.py — scaled recorder timeout.
 
 Camera.__init__ calls pco.Camera() which raises on this Mac (no PCO SDK),
 so instances are built via Camera.__new__(Camera) with the attributes the
-timeout logic reads (shutter_mode, line_time, lightsheet_exposed_lines,
-exposure_time, recorder_timeout_floor, recorder_timeout_interval,
-recorder_timeout_safety_factor). Tests 1-4 cover the pure timeout formula
-(3-4 also assert the legacy-interval floor); test 5 verifies that when
-recorder_timeout_status is True the acquire path does not copy images;
-tests 6-7 cover the legacy-interval floor regression and the
-arm_scan() unconditional reset.
+timeout logic reads (shutter_mode, line_time, ysize,
+lightsheet_exposed_lines, exposure_time, recorder_timeout_floor,
+recorder_timeout_interval, recorder_timeout_safety_factor). The
+per-image-time tests cover the Lightsheet full-frame-period estimate and
+its fallbacks; the timeout-formula tests assert the scaled term, the
+floor, and the legacy-interval floor; the rig-scenario regression encodes
+the adaptive-elevated line time that false-positive timed out a real
+stack; the remaining tests verify that recorder_timeout_status blocks
+the copy path and that arm_scan() resets the flag unconditionally.
 """
 
 from unittest.mock import Mock
@@ -56,6 +58,48 @@ def test_compute_per_image_time_rolling() -> None:
     """In Rolling/Global mode the per-image time is the exposure time."""
     cam = _make_camera(shutter_mode="Rolling")
     assert cam._compute_per_image_time() == pytest.approx(0.1)
+
+
+def test_compute_per_image_time_lightsheet_falls_back_without_ysize() -> None:
+    """With ysize unpopulated (pre-arm or test-built instance) the
+    Lightsheet estimate falls back to the integration window,
+    line_time * lightsheet_exposed_lines, rather than raising."""
+    cam = _make_camera(shutter_mode="Lightsheet")
+    cam.ysize = None
+    assert cam._compute_per_image_time() == pytest.approx(
+        cam.line_time * cam.lightsheet_exposed_lines
+    )
+
+
+def test_compute_per_image_time_lightsheet_falls_back_without_line_time() -> None:
+    """With line_time unpopulated the Lightsheet estimate falls back to
+    exposure_time rather than raising TypeError mid-monitor."""
+    cam = _make_camera(shutter_mode="Lightsheet")
+    cam.line_time = None
+    assert cam._compute_per_image_time() == pytest.approx(cam.exposure_time)
+
+
+def test_lightsheet_timeout_scales_with_full_frame_period() -> None:
+    """Rig failure regression: adaptive exposure pushed line_time to
+    ~8.3 ms for a 250 ms / 30-exposed-line plane, so the real frame period
+    was ~17 s while the old integration-window estimate (line_time *
+    exposed_lines = 0.25 s) collapsed the scaled term onto the 15 s
+    legacy floor and the recorder false-positive timed out.
+
+    With the full-frame-period estimate the scaled term for N=5 images is
+    5 * (250e-3 / 30) * 2048 * 3.0 = 256 s — well above the 15 s floor."""
+    cam = _make_camera(shutter_mode="Lightsheet")
+    cam.line_time = 250e-3 / 30  # adaptive-elevated line time, seconds
+    cam.ysize = 2048
+    cam.lightsheet_exposed_lines = 30
+    per_image = cam._compute_per_image_time()
+    timeout_s = max(
+        cam.recorder_timeout_floor,
+        cam.recorder_timeout_interval,
+        5 * per_image * cam.recorder_timeout_safety_factor,
+    )
+    assert timeout_s > cam.recorder_timeout_interval
+    assert timeout_s == pytest.approx(5 * (250e-3 / 30) * 2048 * 3.0)
 
 
 def test_timeout_formula_floor_applies() -> None:
